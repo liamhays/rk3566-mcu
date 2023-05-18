@@ -153,6 +153,17 @@ appear to be at non-standard addresses:
 | 0x320  | 0x7E0           | MRW       | `mcountinhibit` | `MCU_CSR_MCOUNTEN`    | Machine counter-inhibit register |
 | 0x7B2  | 0x7C8           | DRW       | `dscratch0`     | `MCU_CSR_DBG_SCRATCH` | Debug scratch register 0         |
 
+**Note:** The "Offset" column in the RK3566 TRM is a lie for all MCU
+registers except `MCU_TIMER_CTRL`, `MCU_TIMER_DIV`, `MCU_MTIME`,
+`MCU_MTIMEH`, `MCU_MTIMECMP`, and `MCU_MTIMECMPH`, because these
+registers are not RISC-V CSRs. All the other registers are CSRs, so
+the Offset value is actually the CSR ID. This means that they cannot
+be read directly from the ARM core.
+
+Also note that reads from ARM, at least in a Linux kernel module, must
+be word-aligned. This is likely common knowledge but I had no idea
+until I figured out the above.
+
 ## MCU interrupts
 
 ### MCU interrupt control registers

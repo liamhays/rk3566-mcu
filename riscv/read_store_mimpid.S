@@ -5,8 +5,8 @@
 	   of us are used to a nice legible 68k assembly syntax */
 
 	.equ MAILBOX_BASE_ADDRESS,0xfe780000
-	.equ MAILBOX_B2A_CMD_0,(MAILBOX_BASE_ADDRESS + 0x0008)
-	.equ MAILBOX_B2A_DAT_0,(MAILBOX_BASE_ADDRESS + 0x000C)
+	.equ MAILBOX_B2A_CMD_0,(MAILBOX_BASE_ADDRESS + 0x0030)
+	.equ MAILBOX_B2A_DAT_0,(MAILBOX_BASE_ADDRESS + 0x0034)
 	.equ MAGIC_NUMBER,0xDEADBEEF
 
 	/* Command and data words don't actually have any significant meaning. */

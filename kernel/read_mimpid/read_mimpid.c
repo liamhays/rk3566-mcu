@@ -34,6 +34,23 @@ static const struct platform_device rk3566_mcu = {
 #define MCU_CSR_MIMPID_LEN (4)
 #define REG MCU_CSR_MIMPID
 #define REG_LEN MCU_CSR_MIMPID_LEN
+
+u32 safe_read_io_u32(u32 reg) {
+	pr_info("ENTER: safe_read_io_u32()");
+	if (!request_mem_region(reg, REG_LEN, "read_mimpid")) {
+		pr_err("couldn't request memory region!\n");
+		return 1;
+	}
+	void* __iomem base = ioremap(reg, 4);
+	if (!base) {
+		pr_err("couldn't remap region!\n");
+		return 1;
+	}
+	u32 data = ioread32(base);
+	iounmap(base);
+	release_mem_region(reg, 4);
+	return data;
+}
 static int __init read_mimpid_init(void) {
 	pr_info("ENTER: read_mimpid_init()");
 	//void* __iomem base_addr = devm_platform_ioremap_resource(
