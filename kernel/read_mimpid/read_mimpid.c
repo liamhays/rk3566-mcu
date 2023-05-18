@@ -3,7 +3,7 @@
 #include <linux/printk.h>
 #include <linux/io.h>
 #include <linux/regmap.h>
-
+#include <linux/ioport.h>
 // Regmaps are the preferred way to deal with memory-mapped system
 // registers.
 /*static const struct regmap_config mcu_csr_mimpid_regmap_cfg = {
@@ -29,24 +29,27 @@ static const struct platform_device rk3566_mcu = {
 #define GRF_CHIP_ID (0x800 + 0xFDC60000) // 32 bits, should be 0x3566
 #define GRF_CHIP_ID_LEN (4)
 
-#define REG GRF_CHIP_ID
-#define REG_LEN GRF_CHIP_ID_LEN
+// 99% chance that the reason this fails on read is because it's not aligned. The "offset" value lied!
+#define MCU_CSR_MIMPID (0x0 + 0xFE790000)
+#define MCU_CSR_MIMPID_LEN (4)
+#define REG MCU_CSR_MIMPID
+#define REG_LEN MCU_CSR_MIMPID_LEN
 static int __init read_mimpid_init(void) {
 	pr_info("ENTER: read_mimpid_init()");
 	//void* __iomem base_addr = devm_platform_ioremap_resource(
 	if (!request_mem_region(REG, REG_LEN, "read_mimpid")) {
-		pr_error("couldn't request memory region!\n");
+		pr_err("couldn't request memory region!\n");
 		return 1;
 	}
 	pr_info("requested memory region\n");
 	void* __iomem base = ioremap(REG, REG_LEN);
 	if (!base) {
-		pr_error("couldn't remap region!\n");
+		pr_err("couldn't remap region!\n");
 		return 1;
 	}
 	pr_info("remapped memory region\n");
 	
-	pr_info("chip id: %x\n", ioread32(base));
+	pr_info("data: %x\n", ioread32(base));
 
 	iounmap(base);
 
