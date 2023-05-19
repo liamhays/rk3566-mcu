@@ -6,27 +6,7 @@
 #include <linux/ioport.h>
 
 #include "rsm.h"
-// Regmaps are the preferred way to deal with memory-mapped system
-// registers.
-/*static const struct regmap_config mcu_csr_mimpid_regmap_cfg = {
-	.reg_bits = 32,
-	.val_bits = 32,
-	.reg_stride = 4, // length between start of registers
-	.name = "MCU_CSR_MIMPID",
-};
 
-static const struct resource rk3566_mcu_resources[] = {
-	{
-		.start = 0xFE790000,
-		.end = 0xFE79FFFF,
-		.flags = IORESOURCE_MEM,
-		.name = "mcu-space"
-	},
-};
-
-static const struct platform_device rk3566_mcu = {
-	.name = "rk3566_mcu",
-*/
 
 #define GRF_CHIP_ID (0x800 + 0xFDC60000) // 32 bits, should be 0x3566
 #define GRF_CHIP_ID_LEN (4)
@@ -53,13 +33,11 @@ static const struct platform_device rk3566_mcu = {
 
 void* __iomem reserve_iomem(phys_addr_t addr, resource_size_t size) {
 	void* __iomem base;
-
 	
 	if (!request_mem_region(addr, size, "read_mimpid")) {
 		pr_err("couldn't request region!\n");
 		return NULL;
 	}
-	
 	base = ioremap(addr, size);
 	if (!base) {
 		pr_err("couldn't remap region!\n");
@@ -105,18 +83,7 @@ static int __init read_mimpid_init(void) {
 	memcpy_toio(system_sram, read_store_mimpid_bin, read_store_mimpid_bin_len);
 	pr_info("SRAM after write: %x\n", ioread32(system_sram));
 	
-	// set MCU to use AXI bus (SYSTEM_SRAM sits on AXI)
-	// ... but mailbox sits on APB...
-	/*grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	if (grf_soc_con3 == NULL) {
-		pr_err("grf_soc_con3 == NULL!");
-		return 1;
-	}
-	pr_info("GRF_SOC_CON3 before write: %x\n", ioread32(grf_soc_con3));
-	iowrite32(0x20002000, grf_soc_con3);
-	pr_info("GRF_SOC_CON3 after write: %x\n", ioread32(grf_soc_con3));
-	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	*/
+
 	// write the high bits of the boot address to the boot address register
 	grf_soc_con4 = reserve_iomem((phys_addr_t)GRF_SOC_CON4, GRF_SOC_CON4_LEN);
 	if (grf_soc_con4 == NULL) {
@@ -175,3 +142,15 @@ module_exit(read_mimpid_exit);
 
 MODULE_LICENSE("GPL");
 
+	// set MCU to use AXI bus (SYSTEM_SRAM sits on AXI)
+	// ... but mailbox sits on APB...
+	/*grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
+	if (grf_soc_con3 == NULL) {
+		pr_err("grf_soc_con3 == NULL!");
+		return 1;
+	}
+	pr_info("GRF_SOC_CON3 before write: %x\n", ioread32(grf_soc_con3));
+	iowrite32(0x20002000, grf_soc_con3);
+	pr_info("GRF_SOC_CON3 after write: %x\n", ioread32(grf_soc_con3));
+	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
+	*/
