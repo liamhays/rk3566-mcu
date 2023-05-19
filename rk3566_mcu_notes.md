@@ -7,6 +7,8 @@ changes](https://www.96rocks.com/blog/2020/11/28/introduce-rockchip-rk3568/)
 Mailbox is for certain types of communication. However, the MCU has
 full memory access, so that seems like a better place to start.
 
+
+`W1C` means "write 1 to clear"
 # MCU registers accessible from ARM
 These registers *control* the MCU in the context of the RK3566 as a
 whole. The MCU also has dedicated registers that control subsystems
@@ -163,7 +165,7 @@ need to have at least a basic level of RISC-V knowledge.
 | 0xF11  | MRO       | `mvendorid` | `MCU_CSR_MVENDORID` | Vendor ID                                             |
 | 0xF12  | MRO       | `marchid`   | `MCU_CSR_MARCHID`   | Architecture ID                                       |
 | 0xF13  | MRO       | `mimpid`    | `MCU_CSR_MIMPID`    | Implementation ID                                     |
-| 0xF14  | MRO       | `mhartid`   | `MCU_CSR_MHARTID`   | Hardware thread ID (`harts` are like cores)           |
+| 0xF14  | MRO       | `mhartid`   | `MCU_CSR_MHARTID`   | Hardware thread ID                                    |
 |--------|-----------|-------------|---------------------|-------------------------------------------------------|
 | 0x300  | MRW       | `mstatus`   | `MCU_CSR_MSTATUS`   | Machine status register                               |
 | 0x301  | MRW       | `misa`      | `MCU_CSR_MISA`      | ISA and extensions                                    |
@@ -207,4 +209,13 @@ until I figured out the above.
 According to page 517 of the Part 1 TRM, you can only write to the
 IPIC CSRs using the `CSRRW`/`CSRRWI` instructions, not the
 `CSRRS`/`CSRRC` (set/clear CSR bits) instructions.
+
+
+# Mailbox
+The mailbox is nothing more than a set of 32-bit registers. Every
+register can be accessed by both the ARM cores and the MCU. From Linux
+under Plebian with kernel 6.1.0-9, at least, the clock gate on the
+mailbox is enabled by default, so it must be disabled before the
+mailbox can be used.
+
 
