@@ -1,4 +1,4 @@
-obj-m += read_mimpid.o
+obj-m += read_deadbeef.o
 
 PWD := $(CURDIR)
 

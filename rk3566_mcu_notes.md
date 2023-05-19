@@ -1,14 +1,21 @@
+Much of this information is drawn from the [RK3568 Technical Reference
+Manual](https://opensource.rock-chips.com/images/2/26/Rockchip_RK3568_TRM_Part1_V1.3-20220930P.PDF). The
+RK3568 and RK3566 are basically the same chip with [some slight
+changes](https://www.96rocks.com/blog/2020/11/28/introduce-rockchip-rk3568/)
+(scroll down to the end of the page).
+
 Mailbox is for certain types of communication. However, the MCU has
 full memory access, so that seems like a better place to start.
 
-# MCU related registers
+# MCU registers accessible from ARM
 These registers *control* the MCU in the context of the RK3566 as a
 whole. The MCU also has dedicated registers that control subsystems
-within it. 
+within it.
 
 When write enable bits are 1, write access is enabled to the
 respective bit.
 
+I don't know what all of these registers do yet.
 
 ## `CRU_GATE_CON32`
 | Bit   | Attr | Reset value | Description                             |
@@ -21,17 +28,15 @@ respective bit.
 |-------|------|-------------|-------------------------------------|
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits        |
 | 10    | RW   | 0x1         | `aresetn_mcu` (1=hold MCU in reset) |
-	
 
 Note that the MCU defaults to reset, to prevent it from being a
 nuisance for the rest of the chip.
-	
+
 ## `GRF_SOC_STATUS0`
 | Bit   | Attr | Reset value | Description                  |
 |-------|------|-------------|------------------------------|
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits |
 | 27    | RW   | 0x0         | `wfi_halted` status from MCU |
-
 
 ## `GRF_SOC_CON3`
 | Bit   | Attr | Reset value | Description                                           |
@@ -77,10 +82,19 @@ this register. Together, both bits enable the MCU as a wakeup source.
 This bit is used to find the wakeup source, and bit 15 indicates when
 the MCU was the wakeup source.
 
+# Programming the MCU
+See the example kernel module `read_mimpid` for code, but the basic
+flow is:
+1. Ensure MCU is in reset by writing to `CRU_SOFTRST_CON26`
+2. Put RISC-V code at a known address with the four low nibbles equal
+   to 0 (for example, system SRAM at 0xFDCC0000)
+3. Write the RISC-V boot address to `GRF_SOC_CON4`
+4. Configure other MCU-related registers, like interrupts
+5. Take the MCU out of reset by writing again to `CRU_SOFTRST_CON26`
+
 
 # MCU Details
-Fortunately, this is one aspect of the MCU subsystem that is well
-documented. The MCU has a RV32IMC (32-bit integer RISC-V core with
+The MCU has a RV32IMC (32-bit integer RISC-V core with
 integer multiply/divide and compressed instructions). It has:
 - a 3-stage pipeline (custom, presumably)
 - an interrupt controller known as the Integrated Programmable
@@ -107,6 +121,31 @@ chosen to provide only the highest, Machine (M), in this MCU, because
 Supervisor (S) and User (U) are optional. See
 https://danielmangum.com/posts/risc-v-bytes-privilege-levels/.
 
+## MCU boot
+The boot address field in `GRF_SOC_CON4` is only 16 bits. The
+following function, taken from the Rockchip BSP u-boot, sets the boot
+address of the MCU and shows that these 16 bits are the high 16 bits
+of a value. For example, if the boot address field in `GRF_SOC_CON4`
+is set to 0xFDCC, then the boot address of the MCU will be 0xFDCC0000.
+
+```c
+#ifdef CONFIG_SPL_BUILD
+int spl_fit_standalone_release(char *id, uintptr_t entry_point)
+{
+	/* Reset the scr1 */
+	writel(0x04000400, CRU_BASE + CRU_SOFTRST_CON26);
+	udelay(100);
+	/* set the scr1 addr */
+	writel((0xffff0000) | (entry_point >> 16), GRF_BASE + GRF_SOC_CON4);
+	udelay(10);
+	/* release the scr1 */
+	writel(0x04000000, CRU_BASE + CRU_SOFTRST_CON26);
+
+	return 0;
+}
+#endif
+```
+
 ## MCU CPU control registers
 These are globally mapped, some are RISC-V CSRs and I think some are not.
 
@@ -117,10 +156,8 @@ Privilege column comes from the link above. "MRO" means "machine
 level, read-only", and "MRW" is "machine level, read-write". If this
 MCU supported modes other than Machine, the privilege level of CSRs
 would matter. The RK356x TRM tries to document these, but you really
-have to have at least a basic level of RISC-V knowledge.
+need to have at least a basic level of RISC-V knowledge.
 
-I believe that the reason that Rockchip register names are available
-is so that the ARM cores can change RISC-V CSRs.
 | Number | Privilege | RISC-V Name | Rockchip name       | RISC-V Description                                    |
 |--------|-----------|-------------|---------------------|-------------------------------------------------------|
 | 0xF11  | MRO       | `mvendorid` | `MCU_CSR_MVENDORID` | Vendor ID                                             |
@@ -171,86 +208,3 @@ According to page 517 of the Part 1 TRM, you can only write to the
 IPIC CSRs using the `CSRRW`/`CSRRWI` instructions, not the
 `CSRRS`/`CSRRC` (set/clear CSR bits) instructions.
 
-## MCU reset
-
-
-# Memory ranges
-`lsmem` output:
-
-```
-RANGE                                  SIZE  STATE REMOVABLE BLOCK
-0x0000000000000000-0x00000000efffffff  3.8G online       yes  0-29
-
-Memory block size:       128M
-Total online memory:     3.8G
-Total offline memory:      0B
-```
-
-After this comes the register space, including both SRAMs.
-# Basic code to start with
-No C, just assembly. Let's read the `mimpid` register and write it to
-RAM, then have Linux read it back. RISC-V assembly for this:
-
-Good assembly reference: https://itnext.io/risc-v-instruction-set-cheatsheet-70961b4bbe8
-
-```
-  .section .text
-  .globl start
-
-  start:
-	  csrr x1,mimpid ; read CSR mimpid into x1
-	  li x2,$fdcc0100 ; byte $100 of system SRAM (far beyond program)
-	  sw x1,x2 ; store x1 in x2
-
-  loop:
-	  j loop
-```
-
-Linker script should probably put `.text` at start of system
-SRAM. 
-
-# Accessing SRAM from userspace
-Looks like we should use `mmap()`. This is from
-https://community.nxp.com/t5/i-MX-Processors/i-mx28-on-chip-SRAM/m-p/377296/highlight/true.
-
-In this case, we want to map specifically to `/dev/mem`, from address
-0, with an offset of the argument `address` and a size of argument
-`size`. A map can exist anywhere (often the kernel picks the location
-automatically), but can exist on a file descriptor. The file
-descriptor can be safely closed after the map has been created.
-```c++
-/*!
-   \brief Function to get a mapped to pointer to a specific address area
-   in memory. The address should be 4K (blocksize) aligned
-   \param address The 4K aligned physical address to map to
-   \param size The size in bytes to be mapped
-   \return The pointer to the mapped memory, NULL if mapping fails
-*/
-void * NonVolStorage::MapMemory(uint32_t address, size_t size)
-{
-   int fd;
-   void *ret_addr;
-
-   fd = open("/dev/mem", O_RDWR | O_SYNC);
-
-   if (fd == -1) {
-      perror("open");
-      return NULL;
-   }
-
-   ret_addr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, address);
-   if (ret_addr == MAP_FAILED) {
-      perror("mmap");
-      ret_addr = NULL;
-   }
-
-   if (close(fd) == -1) {
-      perror("close");
-   }
-
-   return ret_addr;
-}
-```
-
-This can also be used to access registers without writing a kernel
-driver: https://stackoverflow.com/a/44362566.

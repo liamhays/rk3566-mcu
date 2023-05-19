@@ -1,5 +1,5 @@
 all:
-	riscv32-unknown-linux-gnu-as read_store_mimpid.S -o read_store_mimpid.o
-	riscv32-unknown-linux-gnu-ld -Tread_store_mimpid.ld read_store_mimpid.o -o read_store_mimpid
-	riscv32-unknown-linux-gnu-objcopy -O binary read_store_mimpid read_store_mimpid.bin
-	xxd -i read_store_mimpid.bin > ../kernel/read_mimpid/rsm.h
+	riscv32-unknown-linux-gnu-as store_deadbeef.S -o store_deadbeef.o
+	riscv32-unknown-linux-gnu-ld -Tstore_deadbeef.ld store_deadbeef.o -o store_deadbeef
+	riscv32-unknown-linux-gnu-objcopy -O binary store_deadbeef store_deadbeef.bin
+	xxd -i store_deadbeef.bin > ../kernel/read_deadbeef/riscv_code.h

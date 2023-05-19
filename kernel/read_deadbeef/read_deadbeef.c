@@ -5,7 +5,9 @@
 #include <linux/regmap.h>
 #include <linux/ioport.h>
 
-#include "rsm.h"
+// I *know* that storing data in header files is not optimal, but it's
+// like 30 bytes.
+#include "riscv_code.h"
 
 
 #define GRF_CHIP_ID (0x800 + 0xFDC60000) // 32 bits, should be 0x3566
@@ -80,7 +82,7 @@ static int __init read_mimpid_init(void) {
 	}
 	pr_info("SRAM address 0xfdcc1000 before MCU runs: %x\n", ioread32(system_sram + 0x1000));
 	pr_info("SRAM before write: %x\n", ioread32(system_sram));
-	memcpy_toio(system_sram, read_store_mimpid_bin, read_store_mimpid_bin_len);
+	memcpy_toio(system_sram, store_deadbeef_bin, store_deadbeef_bin_len);
 	pr_info("SRAM after write: %x\n", ioread32(system_sram));
 	
 
