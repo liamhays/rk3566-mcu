@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/clock/rk3568-cru.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/rockchip,boot-mode.h>
+
+/ {
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+	
+	mbox: mbox@fe780000 {
+	      compatible = "rockchip,rk3368-mailbox";
+	      reg = <0x0 0xfe780000 0x0 0x1000>;
+	      interrupts = <GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH>,
+	      		   <GIC_SPI 216 IRQ_TYPE_LEVEL_HIGH>,
+			   <GIC_SPI 217 IRQ_TYPE_LEVEL_HIGH>,
+			   <GIC_SPI 218 IRQ_TYPE_LEVEL_HIGH>;
+	      clock = <&cru PCLK_MAILBOX>;
+	      clock-names = "pclk_mailbox";
+	      #mbox-cells = <1>;
+	};
+};
