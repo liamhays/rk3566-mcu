@@ -96,39 +96,38 @@ flow is:
 
 
 # MCU Details
-The MCU has a RV32IMC (32-bit integer RISC-V core with
-integer multiply/divide and compressed instructions). It has:
-- a 3-stage pipeline (custom, presumably)
-- an interrupt controller known as the Integrated Programmable
-  Interrupt Controller (IPIC), with 256 IRQ lines and a 256 to 4
-  INTMUX
-- a "32-bit AHB-Lite external memory interface"
-- JTAG debug interface
-- hardware breakpoints
-- 3 64-bit "performance counters" (probably just timers)
-- RTC
-- cycle counter
-- "Instructions-retired counter"
+The MCU is an implementation of the open-source [SCR1
+core](https://github.com/syntacore/scr1). This includes separate
+instruction and data buses, a JTAG debug unit, only machine privilege
+mode, and a 16-line interrupt controller. Rockchip has chosen to
+implement an SCR1 core with a 3-stage pipeline, the RV32IMC
+instruction set and extensions.
+
+The name `SCR1` is used in various parts of the RK356x TRM and
+Rockchip BSP code in reference to the RISC-V core, but Rockchip
+documentation never explicitly defines the core as an implementation
+of the SCR1 core.
+
+The external memory interface can be either an AXI or an AHB
+interface. Which bus the MCU uses is configurable through
+`GRF_SOC_CON3` (untested but seems plausible). 
+
+Much of the documentation in the TRM is literal copy-paste from the
+[SCR1 External Architecture
+Specification (EAS)](https://github.com/syntacore/scr1/blob/master/docs/scr1_eas.pdf). 
 
 The MCU is connected to the system through an interconnect over
 `I_BUS_AHB` and `D_BUS_AHB`, but `GRF_SOC_CON3` probably allows this
 to be changed to AXI. Interrupts look fairly complicated but
 manageable, because of the INTMUX in the IPIC.
 
-PC register is 32 bits, which kind of stands to reason, given that the
-whole SoC uses a 32-bit memory interface.
-
-The RISC-V standard provides 3 basic levels of privilege. Rockchip has
-chosen to provide only the highest, Machine (M), in this MCU, because
-Supervisor (S) and User (U) are optional. See
-https://danielmangum.com/posts/risc-v-bytes-privilege-levels/.
-
 ## MCU boot
 The boot address field in `GRF_SOC_CON4` is only 16 bits. The
 following function, taken from the Rockchip BSP u-boot, sets the boot
 address of the MCU and shows that these 16 bits are the high 16 bits
-of a value. For example, if the boot address field in `GRF_SOC_CON4`
-is set to 0xFDCC, then the boot address of the MCU will be 0xFDCC0000.
+of a 32-bit value. For example, if the boot address field in
+`GRF_SOC_CON4` is set to 0xFDCC, then the boot address of the MCU will
+be 0xFDCC0000.
 
 ```c
 #ifdef CONFIG_SPL_BUILD
@@ -149,74 +148,61 @@ int spl_fit_standalone_release(char *id, uintptr_t entry_point)
 ```
 
 ## MCU CPU control registers
-These are globally mapped, some are RISC-V CSRs and I think some are not.
+The Rockchip register names seen in the TRM are build by adding
+`MCU_CSR_` to the start of the official SCR1 CSR names. The SCR1
+specification also specifies a timer and IPIC registers. Check the
+SCR1 EAS for info on the registers in a more accessible format than
+the copypasta in the RK356x TRM.
 
-RISC-V names and privileges are from
-https://github.com/riscv/riscv-isa-manual/releases/download/Priv-v1.12/riscv-privileged-20211203.pdf
-
-Privilege column comes from the link above. "MRO" means "machine
-level, read-only", and "MRW" is "machine level, read-write". If this
-MCU supported modes other than Machine, the privilege level of CSRs
-would matter. The RK356x TRM tries to document these, but you really
-need to have at least a basic level of RISC-V knowledge.
-
-| Number | Privilege | RISC-V Name | Rockchip name       | RISC-V Description                                    |
-|--------|-----------|-------------|---------------------|-------------------------------------------------------|
-| 0xF11  | MRO       | `mvendorid` | `MCU_CSR_MVENDORID` | Vendor ID                                             |
-| 0xF12  | MRO       | `marchid`   | `MCU_CSR_MARCHID`   | Architecture ID                                       |
-| 0xF13  | MRO       | `mimpid`    | `MCU_CSR_MIMPID`    | Implementation ID                                     |
-| 0xF14  | MRO       | `mhartid`   | `MCU_CSR_MHARTID`   | Hardware thread ID                                    |
-|--------|-----------|-------------|---------------------|-------------------------------------------------------|
-| 0x300  | MRW       | `mstatus`   | `MCU_CSR_MSTATUS`   | Machine status register                               |
-| 0x301  | MRW       | `misa`      | `MCU_CSR_MISA`      | ISA and extensions                                    |
-| 0x304  | MRW       | `mie`       | `MCU_CSR_MIE`       | Machine interrupt-enable register                     |
-| 0x305  | MRW       | `mtvec`     | `MCU_CSR_MTVEC`     | Machine trap-handler base address                     |
-|--------|-----------|-------------|---------------------|-------------------------------------------------------|
-| 0x340  | MRW       | `mscratch`  | `MCU_CSR_MSCRATCH`  | Scratch register for machine trap handlers            |
-| 0x341  | MRW       | `mepc`      | `MCU_CSR_MEPC`      | Machine exception program counter                     |
-| 0x342  | MRW       | `mcause`    | `MCU_CSR_MCAUSE`    | Machine trap cause                                    |
-| 0x343  | MRW       | `mtval`     | `MCU_CSR_MTVAL`     | Machine bad address or instruction                    |
-| 0x344  | MRW       | `mip`       | `MCU_CSR_MIP`       | Machine interrupt pending                             |
-|--------|-----------|-------------|---------------------|-------------------------------------------------------|
-| 0xB00  | MRW       | `mcycle`    | `MCU_CSR_MCYCLEL`   | Lower 32 bits of machine cycle counter                |
-| 0xB02  | MRW       | `minstret`  | `MCU_CSR_MINSTRETL` | Lower 32 bits of machine instructions-retired counter |
-| 0xB80  | MRW       | `mcycleh`   | `MCU_CSR_MCYCLEH`   | Upper 32 bits of `mcycle`                             |
-| 0xB82  | MRW       | `minstreth` | `MCU_CSR_MINSTRETH` | Upper 32 bits of `minstret`                           |
-|--------|-----------|-------------|---------------------|-------------------------------------------------------|
-
-
-And then, of course, there are some standard RISC-V CSR registers that
-appear to be at non-standard addresses:
-| Number | Rockchip number | Privilege | RISC-V name     | Rockchip name         | RISC-V Description               |
-|--------|-----------------|-----------|-----------------|-----------------------|----------------------------------|
-| 0x320  | 0x7E0           | MRW       | `mcountinhibit` | `MCU_CSR_MCOUNTEN`    | Machine counter-inhibit register |
-| 0x7B2  | 0x7C8           | DRW       | `dscratch0`     | `MCU_CSR_DBG_SCRATCH` | Debug scratch register 0         |
+The extra CSRs for the timers are memory-mapped, and cannot be
+accessed with byte and halfword accesses, resulting in the following
+note:
 
 **Note:** The "Offset" column in the RK3566 TRM is a lie for all MCU
 registers except `MCU_TIMER_CTRL`, `MCU_TIMER_DIV`, `MCU_MTIME`,
-`MCU_MTIMEH`, `MCU_MTIMECMP`, and `MCU_MTIMECMPH`, because these
-registers are not RISC-V CSRs. All the other registers are CSRs, so
-the Offset value is actually the CSR ID. This means that they cannot
-be read directly from the ARM core.
+`MCU_MTIMEH`, `MCU_MTIMECMP`, and `MCU_MTIMECMPH`, because these are
+all memory-mapped CSRs (see the SCR1 EAS for info on these registers).
 
 Also note that reads from ARM, at least in a Linux kernel module, must
 be word-aligned. This is likely common knowledge but I had no idea
 until I figured out the above.
 
+## MCU memory
+The SCR1 core provides an optional 64KB of tightly coupled
+memory. There is no definite statement in the RK356x TRM if this has
+been included in the RK3566, but the `SYSTEM_SRAM` at `0xFDCC0000` in
+the RK3566 is 64KB. Could this be the same TCM specified in the SCR1
+specification? Probably not, since it can be used by other
+peripherals, but it still works fine for the SCR1.
+
+I have looked through the kernel sources and have found no use of
+`SYSTEM_SRAM`, even though it reads non-zero values from Linux. The
+data is also consistent across boots, and my theory right now is that
+`SYSTEM_SRAM` is used by the boot blob. I have trampled on
+`SYSTEM_SRAM` from Linux many times with seemingly no ill
+effects. Note also that the RK3566 has 8KB of `PMU_SRAM` which has
+"secure access only". I haven't touched this and I don't think there's
+much reason to.
+
 ## MCU interrupts
+The SCR1 core has a 16-line "Integrated Programmable Interrupt
+Controller", configurable with IPIC CSRs. Interrupt number 0 has the
+lowest priority and interrupt number 16 has the highest priority.
+
+I haven't explored the interrupts yet, I will add more documentation
+when I do.
 
 ### MCU interrupt control registers
-According to page 517 of the Part 1 TRM, you can only write to the
-IPIC CSRs using the `CSRRW`/`CSRRWI` instructions, not the
-`CSRRS`/`CSRRC` (set/clear CSR bits) instructions.
-
+You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
+instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)
+instructions.
 
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every
 register can be accessed by both the ARM cores and the MCU. From Linux
 under Plebian with kernel 6.1.0-9, at least, the clock gate on the
 mailbox is enabled by default, so it must be disabled before the
-mailbox can be used.
+mailbox can be used. 
 
 The interrupt documentation in the Mailbox section of the RK3568 TRM
 seems to be ripped directly from the RK3368, as the interrupt numbers
@@ -251,3 +237,11 @@ mbox: mbox@fe780000 {
 		/* not disabling this here */
 };
 ```
+
+
+**Update:** This would probably work if the Rockchip mailbox driver
+were compiled into the Plebian kernel. I discussed this on the bridged
+#Quartz64 channel and `diederik` made a pull request to Debian to
+enable the config option `CONFIG_ROCKCHIP_MBOX`. However, they said
+that it won't make it into Debian Bookworm, so I think mailbox work
+through the kernel driver will have to wait a bit.

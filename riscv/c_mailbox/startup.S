@@ -40,7 +40,13 @@ _start:
 
 	/* Stack pointer to top of system SRAM at a 16-byte aligned location as per RISC-V ABI */
 	li sp,0xFDCCFFF0
-	
+
+	/* copy .data section */
+	li x1,=_text_end
+	li x2,=_data_start
+	li x3,=_data_end
+data_loop:
+	li x1,
 	/* go to C */
 	jal main
 
