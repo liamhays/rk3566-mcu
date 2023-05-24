@@ -1,14 +1,25 @@
+# RK3566 MCU notes
 Much of this information is drawn from the [RK3568 Technical Reference
 Manual](https://opensource.rock-chips.com/images/2/26/Rockchip_RK3568_TRM_Part1_V1.3-20220930P.PDF). The
 RK3568 and RK3566 are basically the same chip with [some slight
 changes](https://www.96rocks.com/blog/2020/11/28/introduce-rockchip-rk3568/)
 (scroll down to the end of the page).
 
-Mailbox is for certain types of communication. However, the MCU has
-full memory access, so that seems like a better place to start.
+# Toolchains and code
+To compile code for the MCU, I recommend using either the [xPack GNU
+RISC-V tools](https://xpack.github.io/dev-tools/riscv-none-elf-gcc) or
+[building a toolchain from
+scratch](https://github.com/riscv-collab/riscv-gnu-toolchain). Do not
+use a `-unknown-linux` or `-linux-gnu` toolchain, as there's no Linux
+on the MCU to link to. I also did not have success using the
+`gcc-riscv64-unknown-elf` and `binutils-riscv64-unknown-elf` packages
+in the Debian repository (in spite of the fact that compiling from
+scratch also creates an `-unknown-elf` toolchain).
 
+The xPack tools are available pre-built for x64, ARM, and ARM64
+architectures. If you're building RISC-V code on the RK3566, use the
+ARM64 build.
 
-`W1C` means "write 1 to clear"
 # MCU registers accessible from ARM
 These registers *control* the MCU in the context of the RK3566 as a
 whole. The MCU also has dedicated registers that control subsystems
@@ -16,6 +27,8 @@ within it.
 
 When write enable bits are 1, write access is enabled to the
 respective bit.
+
+`W1C` means "write 1 to clear".
 
 I don't know what all of these registers do yet.
 
