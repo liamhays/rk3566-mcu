@@ -5,9 +5,10 @@
 #include <linux/regmap.h>
 #include <linux/ioport.h>
 
-// I *know* that storing data in header files is not optimal, but it's
+// I *know* that storing data in header files is not optimal, since if
+// you get a lot of data it takes a long time to recompile. but it's
 // like 30 bytes.
-#include "riscv_code.h"
+#include "riscv/build/hello_mailbox_rv_bin.h"
 
 #define SYS_GRF_BASE (0xFDC60000)
 
@@ -82,7 +83,7 @@ static int __init mailbox_init(void) {
 	
 	// copy RISC-V program into SYSTEM_SRAM
 	system_sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
-	memcpy_toio(system_sram, mailbox_bin, mailbox_bin_len);
+	memcpy_toio(system_sram, hello_mailbox_rv_bin, hello_mailbox_rv_bin_len);
 	// we're going to use SRAM later
 	
 	// write the high bits of the boot address to the boot address register
