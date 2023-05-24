@@ -1,4 +1,9 @@
 # RK3566 MCU notes
+This document details the RISC-V MCU inside the RK3566 SoC. You should
+have a good knowledge of RISC-V system architecture (CSRs, instruction
+set) as well as low-level computer architecture (registers and memory)
+in general.
+
 Much of this information is drawn from the [RK3568 Technical Reference
 Manual](https://opensource.rock-chips.com/images/2/26/Rockchip_RK3568_TRM_Part1_V1.3-20220930P.PDF). The
 RK3568 and RK3566 are basically the same chip with [some slight
@@ -20,6 +25,8 @@ The xPack tools are available pre-built for x64, ARM, and ARM64
 architectures. If you're building RISC-V code on the RK3566, use the
 ARM64 build.
 
+# RK3566 MCU hardware
+## RK3566 MCU registers
 These registers *control* the MCU in the context of the RK3566 as a
 whole. The MCU also has dedicated registers that control subsystems
 within it.
@@ -27,7 +34,7 @@ within it.
 When write enable bits are 1, write access is enabled to the
 respective bit.
 
-`W1C` means "write 1 to clear".
+`W1C` means "write 1 to clear", usually used for interrupts.
 
 I don't know what all of these registers do yet.
 
@@ -97,12 +104,12 @@ This bit is used to find the wakeup source, and bit 15 indicates when
 the MCU was the wakeup source.
 
 # Programming the MCU
-See the example kernel module `read_mimpid` for code, but the basic
-flow is:
+See the `hello_mailbox` example for code, but the basic flow is:
 1. Ensure MCU is in reset by writing to `CRU_SOFTRST_CON26`
-2. Put RISC-V code at a known address with the four low nibbles equal
-   to 0 (for example, system SRAM at 0xFDCC0000)
-3. Write the RISC-V boot address to `GRF_SOC_CON4`
+2. Put RISC-V code at a known address on a 64KB boundary (four low nibbles equal
+   to 0), for example, system SRAM at 0xFDCC0000
+3. Write the RISC-V boot address to `GRF_SOC_CON4`, with system SRAM,
+   this would be 0xFDCC
 4. Configure other MCU-related registers, like interrupts
 5. Take the MCU out of reset by writing again to `CRU_SOFTRST_CON26`
 
@@ -112,8 +119,8 @@ The MCU is an implementation of the open-source [SCR1
 core](https://github.com/syntacore/scr1). This includes separate
 instruction and data buses, a JTAG debug unit, only machine privilege
 mode, and a 16-line interrupt controller. Rockchip has chosen to
-implement an SCR1 core with a 3-stage pipeline, the RV32IMC
-instruction set and extensions.
+implement an SCR1 core with a 3-stage pipeline and the RV32IMC
+instruction set.
 
 The name `SCR1` is used in various parts of the RK356x TRM and
 Rockchip BSP code in reference to the RISC-V core, but Rockchip
@@ -121,8 +128,8 @@ documentation never explicitly defines the core as an implementation
 of the SCR1 core.
 
 The external memory interface can be either an AXI or an AHB
-interface. Which bus the MCU uses is configurable through
-`GRF_SOC_CON3` (untested but seems plausible). 
+interface. Which bus the MCU uses seems to be configurable through
+`GRF_SOC_CON3` (though I haven't tested this yet).
 
 Much of the documentation in the TRM is literal copy-paste from the
 [SCR1 External Architecture
@@ -190,9 +197,9 @@ peripherals, but it still works fine for the SCR1.
 I have looked through the kernel sources and have found no use of
 `SYSTEM_SRAM`, even though it reads non-zero values from Linux. The
 data is also consistent across boots, and my theory right now is that
-`SYSTEM_SRAM` is used by the boot blob. I have trampled on
-`SYSTEM_SRAM` from Linux many times with seemingly no ill
-effects. Note also that the RK3566 has 8KB of `PMU_SRAM` which has
+`SYSTEM_SRAM` is used by the boot blob that configures the DDR RAM. I
+have trampled on `SYSTEM_SRAM` from Linux many times with seemingly no
+ill effects. Note also that the RK3566 has 8KB of `PMU_SRAM` which has
 "secure access only". I haven't touched this and I don't think there's
 much reason to.
 
