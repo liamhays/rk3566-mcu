@@ -2,10 +2,11 @@ obj-m += timer_irq.o
 
 PWD := $(CURDIR)
 
+# semicolons required to prevent starting a new shell
 all:
-	make riscv/Makefile
+	cd riscv; make ; cd ..;
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 
 clean:
-	make riscv/Makefile clean
+	cd riscv; make -f Makefile clean; cd ..;
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean

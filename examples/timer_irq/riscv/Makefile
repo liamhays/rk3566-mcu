@@ -19,7 +19,10 @@ LFLAGS=-nostartfiles -nostdlib -march=rv32imc -mabi=ilp32 -misa-spec=2.2
 
 PROJECT_NAME=timer_irq_rv
 
-all: build/$(PROJECT_NAME).bin
+# The pipe defines an order-only prerequisite, which prevents make from
+# rebuilding all the code unless something changes. See
+# https://www.twoistoomany.com/blog/2020/07/23/make-order-only-prerequisites/
+all: build/$(PROJECT_NAME)_bin.h | build
 
 .PHONY: clean
 
@@ -29,18 +32,20 @@ clean:
 build:
 	mkdir $@
 
-build/ncrt0.o: build
+build/ncrt0.o: ../../common/ncrt0.S | build
 	$(AS) $(ASFLAGS) -o build/ncrt0.o ../../common/ncrt0.S
 
-build/$(PROJECT_NAME).o: $(PROJECT_NAME).c build
-	$(CC) -c -o build/$(PROJECT_NAME).o $(CFLAGS) $(PROJECT_NAME).c
+build/$(PROJECT_NAME).o: $(PROJECT_NAME).c | build
+	$(CC) -c -o $@ $(CFLAGS) $(PROJECT_NAME).c
 
-build/$(PROJECT_NAME).elf: build build/ncrt0.o build/$(PROJECT_NAME).o
-	$(LD) $(LFLAGS) -T ../../common/common.ld build/ncrt0.o build/$(PROJECT_NAME).o -o build/$(PROJECT_NAME).elf
+build/$(PROJECT_NAME).elf: build/ncrt0.o build/$(PROJECT_NAME).o | build
+	$(LD) $(LFLAGS) -T ../../common/common.ld build/ncrt0.o build/$(PROJECT_NAME).o -o $@
 
 # xxd is pretty dim and makes the variable name in the header
 # file `build_$(PROJECT_NAME)_bin`, we don't want the `build`.
-build/$(PROJECT_NAME).bin: build build/$(PROJECT_NAME).elf
+build/$(PROJECT_NAME).bin: build/$(PROJECT_NAME).elf | build
 	$(OBJCOPY) -O binary build/$(PROJECT_NAME).elf build/$(PROJECT_NAME).bin
-	xxd -i build/$(PROJECT_NAME).bin > build/$(PROJECT_NAME)_bin.h
-	sed -i 's/build_//g' build/$(PROJECT_NAME)_bin.h
+
+build/$(PROJECT_NAME)_bin.h: build/$(PROJECT_NAME).bin | build
+	xxd -i build/$(PROJECT_NAME).bin > $@
+	sed -i 's/build_//g' $@

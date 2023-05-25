@@ -34,8 +34,8 @@ void irq_entry() {
 #define MCU_BASE (0xFE790000)
 // timers are memory mapped CSRs
 #define MCU_TIMER_CTRL (MCU_BASE + 0x0000)
-
-#define mtimecmp (MCU_BASE + 0x0010)
+// the first six MCU registers are just memory locations, not CSRs.
+#define MCU_MTIMECMP (MCU_BASE + 0x0010)
 int main() {
   // default value to make change visible
   *mailbox_b2a_cmd_0 = 0x11111111;
@@ -62,12 +62,10 @@ int main() {
   // timer divider defaults to one tick per every clock tick
 
   // set low 32 bits of MTIMECMP to 0x100 (something low)
-  uint32_t mtimecmp_value = 0x100;
-  __asm__ volatile ("la t0,0xfe790010\nsw %0, 0(t0)"
-		    : // no output
-		    : "r" (mtimecmp_value) // write mtimecmp_value to %0
-		    : // no clobber
-		    );
+  volatile uint64_t* mtimecmp = (uint64_t*)MCU_MTIMECMP;
+  // prevent problems caused by intermediate values
+  *mtimecmp = 0xffffffffffffffff;
+  *mtimecmp = 0x100;
   while (1);
 
   return 0;
