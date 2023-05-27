@@ -45,6 +45,7 @@ void irq_entry() {
   *mailbox_b2a_cmd_0 = 0xabababab;
 
 }
+#pragma GCC pop_options
 
 int main() {
   // default value to make change visible

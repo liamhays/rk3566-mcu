@@ -180,7 +180,8 @@ note:
 **Note:** The "Offset" column in the RK3566 TRM is a lie for all MCU
 registers except `MCU_TIMER_CTRL`, `MCU_TIMER_DIV`, `MCU_MTIME`,
 `MCU_MTIMEH`, `MCU_MTIMECMP`, and `MCU_MTIMECMPH`, because these are
-all memory-mapped CSRs (see the SCR1 EAS for info on these registers).
+all memory-mapped registers (**not CSRs!**) (see the SCR1 EAS for info
+on these registers).
 
 Also note that reads from ARM, at least in a Linux kernel module, must
 be word-aligned. This is likely common knowledge but I had no idea
@@ -208,10 +209,20 @@ The SCR1 core has a 16-line "Integrated Programmable Interrupt
 Controller", configurable with IPIC CSRs. Interrupt number 0 has the
 lowest priority and interrupt number 16 has the highest priority.
 
-I haven't explored the interrupts yet, I will add more documentation
-when I do.
+Although the IPIC has 16 input lines, only 4 are used in the
+RK3566. The INTMUX selects one of 4 interrupts out of 256 inputs, and
+interrupts from the IPIC are external interrupts to the RISC-V core.
 
-### MCU interrupt control registers
+The timer in the RISC-V core feeds the timer interrupt. It works
+exactly like the RISC-V spec describes.
+
+I don't know how the INTMUX inputs actually map to the IPIC
+inputs. The TRM is not very helpful in its description of how the
+INTMUX works, so I think the best approach to using external
+interrupts is to set the RISC-V to direct interrupt mode, then read
+the INTMUX registers in the handler to figure out who caused the interrupt.
+
+
 You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
 instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)
 instructions.
