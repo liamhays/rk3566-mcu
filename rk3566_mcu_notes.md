@@ -195,14 +195,10 @@ the RK3566 is 64KB. Could this be the same TCM specified in the SCR1
 specification? Probably not, since it can be used by other
 peripherals, but it still works fine for the SCR1.
 
-I have looked through the kernel sources and have found no use of
-`SYSTEM_SRAM`, even though it reads non-zero values from Linux. The
-data is also consistent across boots, and my theory right now is that
-`SYSTEM_SRAM` is used by the boot blob that configures the DDR RAM. I
-have trampled on `SYSTEM_SRAM` from Linux many times with seemingly no
-ill effects. Note also that the RK3566 has 8KB of `PMU_SRAM` which has
-"secure access only". I haven't touched this and I don't think there's
-much reason to.
+According to page 14 of the TRM, `SYSTEM_SRAM` is used for the
+initialization blob that sets up the chip. This explains why it always
+reads the same value from Linux. Furthermore, Linux does not use this
+block of memory, so you're free to use it for the MCU.
 
 ## MCU interrupts
 The SCR1 core has a 16-line "Integrated Programmable Interrupt

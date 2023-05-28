@@ -70,8 +70,6 @@ int main() {
 		    );
 
   // enable global interrupts
-  // this is causing the whole system to crash: probably causing a bad
-  // access somewhere
   uint32_t mie_enable = 0b1000;
   __asm__ volatile ("csrrs    zero, mstatus, %0"
 		    : // no output
