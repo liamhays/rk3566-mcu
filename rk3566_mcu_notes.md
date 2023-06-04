@@ -218,6 +218,15 @@ INTMUX works, so I think the best approach to using external
 interrupts is to set the RISC-V to direct interrupt mode, then read
 the INTMUX registers in the handler to figure out who caused the interrupt.
 
+### INTMUX registers
+I have literally no idea where in memory these are located. From
+Linux, address 0x00 to 0x7c inclusive at offset 0, 0x1000,
+... relative to MCU space (0xFE790000). However, 0x88 and then
+0x100-0xfff for the rest of that 0x1000-sized space holds some amount
+of data. It looks like only 2 bits but it's hard to say because
+writing and reading data in MCU space from Linux seems iffy at best.
+
+It's hard to say exactly what address to use, but I'
 
 You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
 instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)

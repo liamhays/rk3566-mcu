@@ -25,18 +25,22 @@
 // ICSR configures the interrupt specified by IPIC_IDX
 #define MCU_CSR_IPIC_ICSR (0xBF7)
 
-// kernel module will have to control INTMUX clock and reset
-#define INTMUX_BASE (?) // what is the base address?
+// kernel module controls INTMUX clock and reset
+
+// could intmux base be in MCU_INTC section of memory? (MCU_BASE)
+#define INTMUX_BASE (MCU_BASE) // what is the base address?
 #define INTMUX_INT_MASK_GROUP25 (INTMUX_BASE + 0x0064)
 #define INTMUX_INT_FLAG_LEVEL2 (INTMUX_BASE + 0x0100)
 
+#define SRAM_BASE (0xFDCC0000)
+
 volatile uint32_t* intmux_int_mask_group25 = (uint32_t*)INTMUX_INT_MASK_GROUP25;
-volatile uint32_t* intmux_int_flag_level2 = (uint32_t*)INTMUX_INT_MASK_LEVEL2;
+volatile uint32_t* intmux_int_flag_level2 = (uint32_t*)INTMUX_INT_FLAG_LEVEL2;
 
 volatile uint32_t* mailbox_b2a_cmd_0 = (uint32_t*)MAILBOX_B2A_CMD_0;
 volatile uint32_t* mailbox_b2a_dat_0 = (uint32_t*)MAILBOX_B2A_DAT_0;
 volatile uint32_t* mailbox_a2b_status = (uint32_t*)MAILBOX_A2B_STATUS;
-
+/*
 // Under GCC, interrupt functions must have the interrupt attribute
 static void irq_entry() __attribute__ ((interrupt ("machine")));
 
@@ -81,11 +85,11 @@ void irq_entry() {
 		    );
 }
 #pragma GCC pop_options
-
+*/
 int main() {
   // set vector address in mtvec and use direct mode (INTMUX
   // connection to IPIC lines is unclear)
-  uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
+  /*uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
   __asm__ volatile ("csrw     mtvec, %0"
 		    : // no output
 		    : "r" (mtvec_value) // write mtvec_value to %0
@@ -125,8 +129,21 @@ int main() {
 		    : "r" (mie_enable)
 		    :
 		    );
-  
-
+  */
+  // leave room for code
+  volatile uint32_t* system_sram = (uint32_t*)(SRAM_BASE + 0x200);
+  uint32_t addr = 0;
+  volatile uint32_t* mcu = (uint32_t*)(0xFE7A0000);
+  // test all 32-bit addresses in 0xfe790000-0xfe79ffff for writeability
+  for (int i = 0; i < 0x1fff; i += 4) {
+    mcu[i] = 0x12345678;
+    if (mcu[i] != 0) {
+      system_sram[addr] = (uint32_t)(mcu + i);
+      addr += 4;
+      system_sram[addr] = mcu[i];
+      addr += 4;
+    }
+  }
   while (1);
 
   return 0;
