@@ -34,7 +34,8 @@ within it.
 When write enable bits are 1, write access is enabled to the
 respective bit.
 
-`W1C` means "write 1 to clear", usually used for interrupts.
+`W1C` means "write 1 to clear", usually used for interrupt status
+registers.
 
 I don't know what all of these registers do yet.
 
@@ -68,14 +69,18 @@ nuisance for the rest of the chip.
 | 13    | RW   | 0x0         | `mcu_sel_axi`, 0=MCU uses AHB bus, 1=MCU uses AXI bus |
 | 12    | RW   | 0x0         | `mcu_soft_irq`, "MCU soft interrupt request"          |
 
+No idea what the exact result of these are.
+
+**TODO**: `mcu_soft_irq` seems to suggest that the ARM cores can
+trigger an interrupt on the MCU, this should be pretty easy to test.
+
 ## `GRF_SOC_CON4`
 | Bit   | Attr | Reset value | Description                       |
 |-------|------|-------------|-----------------------------------|
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits      |
 | 15:0  | RW   | 0x0000      | `mcu_boot_addr`, MCU boot address |
 
-I think this is actually the high 16 bits of a 32 bit boot address for
-the MCU, but I don't know that for certain yet.
+See below for the meaning of this field.
 
 ## `PMU_INT_MASK_CON`
 | Bit   | Attr | Reset value | Description                                                     |
@@ -101,17 +106,21 @@ this register. Together, both bits enable the MCU as a wakeup source.
 | 15    | RO   | 0x0         | `wakeup_sys_int_st`, 1=MCU sft as wakeup source status |
 
 This bit is used to find the wakeup source, and bit 15 indicates when
-the MCU was the wakeup source.
+the MCU was the wakeup source, by my understanding.
 
 # Programming the MCU
-See the `hello_mailbox` example for code, but the basic flow is:
-1. Ensure MCU is in reset by writing to `CRU_SOFTRST_CON26`
+See the `timer_irq` example for code, but the basic flow is:
+1. Disable the clock gate on the MCU, mailbox, and INTMUX---the
+   mailbox and possible the INTMUX have the clock gate enabled in
+   Linux by default
+1. Put MCU, mailbox, and INTMUX in reset by writing to `CRU_SOFTRST_CON26`
 2. Put RISC-V code at a known address on a 64KB boundary (four low nibbles equal
    to 0), for example, system SRAM at 0xFDCC0000
 3. Write the RISC-V boot address to `GRF_SOC_CON4`, with system SRAM,
    this would be 0xFDCC
-4. Configure other MCU-related registers, like interrupts
-5. Take the MCU out of reset by writing again to `CRU_SOFTRST_CON26`
+4. Configure other MCU-related registers
+5. Take the MCU, mailbox, and INTMUX out of reset by writing again to
+   `CRU_SOFTRST_CON26`
 
 
 # MCU Details
@@ -141,12 +150,13 @@ to be changed to AXI. Interrupts look fairly complicated but
 manageable, because of the INTMUX in the IPIC.
 
 ## MCU boot
-The boot address field in `GRF_SOC_CON4` is only 16 bits. The
-following function, taken from the Rockchip BSP u-boot, sets the boot
-address of the MCU and shows that these 16 bits are the high 16 bits
-of a 32-bit value. For example, if the boot address field in
-`GRF_SOC_CON4` is set to 0xFDCC, then the boot address of the MCU will
-be 0xFDCC0000.
+The boot address field in `GRF_SOC_CON4` is only 16 bits, even though
+the MCU boots from a 32-bit address. The following function, taken
+from the Rockchip BSP u-boot, sets the boot address of the MCU and
+shows that these 16 bits are the high 16 bits of a 32-bit value. For
+example, if the boot address field in `GRF_SOC_CON4` is set to 0xFDCC,
+then the boot address of the MCU will be 0xFDCC0000. This means that
+MCU code must be aligned on a 64KB boundary.
 
 ```c
 #ifdef CONFIG_SPL_BUILD
@@ -183,22 +193,18 @@ registers except `MCU_TIMER_CTRL`, `MCU_TIMER_DIV`, `MCU_MTIME`,
 all memory-mapped registers (**not CSRs!**) (see the SCR1 EAS for info
 on these registers).
 
-Also note that reads from ARM, at least in a Linux kernel module, must
-be word-aligned. This is likely common knowledge but I had no idea
-until I figured out the above.
-
 ## MCU memory
 The SCR1 core provides an optional 64KB of tightly coupled
-memory. There is no definite statement in the RK356x TRM if this has
-been included in the RK3566, but the `SYSTEM_SRAM` at `0xFDCC0000` in
-the RK3566 is 64KB. Could this be the same TCM specified in the SCR1
-specification? Probably not, since it can be used by other
-peripherals, but it still works fine for the SCR1.
+memory. While the RK3566 provides 64KB `SYSTEM_SRAM`, it does not
+appear to be coupled in any specific way to any core.
 
 According to page 14 of the TRM, `SYSTEM_SRAM` is used for the
 initialization blob that sets up the chip. This explains why it always
 reads the same value from Linux. Furthermore, Linux does not use this
 block of memory, so you're free to use it for the MCU.
+
+`PMU_SRAM` is different and may be useful for sleep modes, since it's
+maintained in some low-power modes.
 
 ## MCU interrupts
 The SCR1 core has a 16-line "Integrated Programmable Interrupt
@@ -208,6 +214,10 @@ lowest priority and interrupt number 16 has the highest priority.
 Although the IPIC has 16 input lines, only 4 are used in the
 RK3566. The INTMUX selects one of 4 interrupts out of 256 inputs, and
 interrupts from the IPIC are external interrupts to the RISC-V core.
+
+You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
+instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)
+instructions.
 
 The timer in the RISC-V core feeds the timer interrupt. It works
 exactly like the RISC-V spec describes.
@@ -219,18 +229,15 @@ interrupts is to set the RISC-V to direct interrupt mode, then read
 the INTMUX registers in the handler to figure out who caused the interrupt.
 
 ### INTMUX registers
-I have literally no idea where in memory these are located. From
-Linux, address 0x00 to 0x7c inclusive at offset 0, 0x1000,
-... relative to MCU space (0xFE790000). However, 0x88 and then
-0x100-0xfff for the rest of that 0x1000-sized space holds some amount
-of data. It looks like only 2 bits but it's hard to say because
-writing and reading data in MCU space from Linux seems iffy at best.
-
-It's hard to say exactly what address to use, but I'
-
-You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
-instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)
-instructions.
+I have literally no idea where in memory these are located. The TRM
+provides no information on the INTMUX base address, and probing the
+MCU space has not been fruitful. From Linux, address 0x00 to 0x7c
+inclusive at offset 0, 0x1000, ... relative to MCU space (0xFE790000)
+seem to be able to hold values. However, 0x88 and then 0x100-0xfff for
+the rest of that 0x1000-sized space holds some amount of data. It
+looks like only 2 bits but it's hard to say because writing and
+reading data in MCU space from Linux seems iffy at best, so take this
+with a grain of salt.
 
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every

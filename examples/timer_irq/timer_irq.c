@@ -73,10 +73,9 @@ static int __init mailbox_init(void) {
 	iowrite32(0x80000000 | 0x0000, cru_gate_con32); // only write to bit 15
 	release_iomem((phys_addr_t)CRU_GATE_CON32, CRU_GATE_CON32_LEN);
 	
-	// put MCU and mailbox in reset
+	// put MCU, mailbox, and INTMUX in reset
 	cru_softrst_con26 = reserve_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
-	// this convienent hex number from the rockchip bsp u-boot
-	iowrite32(0xffff0000 | (1 << 12) | (1 << 10), cru_softrst_con26);
+	iowrite32(0xffff0000 | (1 << 12) | (1 << 11) | (1 << 10), cru_softrst_con26);
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	
 	pr_info("mailbox: MCU and mailbox reset (MAILBOX_B2A_CMD_0 = 0)");
@@ -93,7 +92,7 @@ static int __init mailbox_init(void) {
 
 	udelay(10); // Rockchip BSP u-boot does this after writing the address
 	
-	// take MCU and mailbox out of reset
+	// take MCU, mailbox, and INTMUX out of reset
 	cru_softrst_con26 = reserve_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	// this register defaults to 0x400, so we can safely trample the whole thing
 	iowrite32((0xffff0000), cru_softrst_con26); // clear all reset bits, enabling the MCU to run
