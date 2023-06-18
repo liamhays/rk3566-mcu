@@ -28,19 +28,21 @@
 // kernel module controls INTMUX clock and reset
 
 // could intmux base be in MCU_INTC section of memory? (MCU_BASE)
-#define INTMUX_BASE (MCU_BASE) // what is the base address?
+#define INTMUX_BASE (0xFE798000) // what is the base address?
 #define INTMUX_INT_MASK_GROUP25 (INTMUX_BASE + 0x0064)
+#define INTMUX_INT_MASK_GROUP27 (INTMUX_BASE + 0x006C)
 #define INTMUX_INT_FLAG_LEVEL2 (INTMUX_BASE + 0x0100)
 
 #define SRAM_BASE (0xFDCC0000)
 
 volatile uint32_t* intmux_int_mask_group25 = (uint32_t*)INTMUX_INT_MASK_GROUP25;
+volatile uint32_t* intmux_int_mask_group27 = (uint32_t*)INTMUX_INT_MASK_GROUP27;
 volatile uint32_t* intmux_int_flag_level2 = (uint32_t*)INTMUX_INT_FLAG_LEVEL2;
 
 volatile uint32_t* mailbox_b2a_cmd_0 = (uint32_t*)MAILBOX_B2A_CMD_0;
 volatile uint32_t* mailbox_b2a_dat_0 = (uint32_t*)MAILBOX_B2A_DAT_0;
 volatile uint32_t* mailbox_a2b_status = (uint32_t*)MAILBOX_A2B_STATUS;
-/*
+
 // Under GCC, interrupt functions must have the interrupt attribute
 static void irq_entry() __attribute__ ((interrupt ("machine")));
 
@@ -50,77 +52,77 @@ static void irq_entry() __attribute__ ((interrupt ("machine")));
 // bits (32-26 = 6, 2**6 = 64)
 #pragma GCC optimize ("align-functions=64")
 void irq_entry() {
-  // tell the IPIC that we're entering interrupt handling
-  __asm__ volatile ("csrw    %[MCU_CSR_IPIC_SOI],%0"
+  // write to SOI and EOI, apparently you can do this together at once
+  __asm__ volatile ("\
+csrw    0xBF5, zero \n	# write to SOI \
+csrw    0xBF4, zero \n  # write to EOI \
+csrw    mie, zero \n    # disable interrupts"
 		    : // no input
-		    : "r" (0xf) // write any value to start interrupt processing
+		    : // no output
 		    : // no clobber
 		    );
-
-  // clear IPIC interrupt pending flag
-  __asm__ volatile ("csrw    %[MCU_CSR_IPIC_CICSR],%0"
-		    : // no input
-		    : "r" (0) // clear pending and disable interrupt
-		    : // no clobber
-		    );
-  uint32_t cause;
-
-  // in direct mode, you have to read mcause
-  __asm__ volatile ("csrr     %0,mcause"
-		    : "=r" (cause) // output into cause
-		    : // no input
-		    : // no clobber
-		    );
-  
   // clear the mailbox interrupt by writing 1 to bit 0 of MAILBOX_A2B_STATUS  
   *mailbox_a2b_status = 1;
 
   // update B2A_CMD_0 to notify kernel module
   *mailbox_b2a_cmd_0 = 0xabababab;
+
   
-  __asm__ volatile ("csrw    %[MCU_CSR_IPIC_EOI],%0"
+  // clear IPIC interrupt pending flag (optional?)
+  __asm__ volatile ("csrw    %0,%1"
 		    : // no input
-		    : "r" (0xf) // write any value to end interrupt processing
-		    :
+		    : "i" (MCU_CSR_IPIC_CICSR), "r" (0) // clear pending and disable interrupt
+		    : // no clobber
 		    );
 }
 #pragma GCC pop_options
-*/
+
 int main() {
   // set vector address in mtvec and use direct mode (INTMUX
   // connection to IPIC lines is unclear)
-  /*uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
+  uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
   __asm__ volatile ("csrw     mtvec, %0"
 		    : // no output
 		    : "r" (mtvec_value) // write mtvec_value to %0
 		    : // no clobber
 		    );
   
-		      
-  // enable external interrupts in mie
-  uint32_t meie_enable = (1 << 11); // set bit 11 (0-indexed)
-  __asm__ volatile ("csrrs    zero, mie, %0"
-		    : // no output
-		    : "r" (mtie_enable) // write mtie_enable to %0
-		    : // no clobber
-		    );
 
   // mailbox A2B interrupts are enabled by kernel module
   
   // A2B interrupt is *probably* `mailbox_ca55[0]`, which is GIC
   // interrupt 215. This maps to INTMUX_INT_MASK_GROUP25 bit 6 (0-indexed).
-  *intmux_int_mask_group25 = (1 << 6);
 
-  // we are using IPIC interrupt 0. Is this correct? No idea!
-  // IPIC_IDX defaults to 0.
+  // mailbox_mcu[0] is GIC 219. This maps to INTMUX_INT_MASK_GROUP27 bit 3
+  //*intmux_int_mask_group25 = (0xff);
+  //*intmux_int_mask_group27 = (0xff);
+  
   // interrupt enable is bit 1 (0-indexed)
-  uint32_t cicsr_enable_interrupt = 1 << 1;
-  __asm__ volatile ("csrw    %[MCU_CSR_IPIC_CICSR], %1"
+
+  // enable all 16 interrupts in ICSR
+  for (int i = 0; i < 16; i++) {
+    // set the IPIC index register to the current interrupt
+    __asm__ volatile ("csrw   %0, %1"
+		      : // no output
+		      : "i" (MCU_CSR_IPIC_IDX), "r" (i)
+		      : // no clobber
+		      );
+    // enable this interrupt
+    uint32_t icsr_enable_interrupt = (1 << 1);
+    __asm__ volatile ("csrw   %0, %1"
+		      : // no output
+		      : "i" (MCU_CSR_IPIC_ICSR), "r" (icsr_enable_interrupt)
+		      : // no clobber
+		      );
+  }
+
+  // enable external interrupts in mie
+  uint32_t meie_enable = (1 << 11); // set bit 11 (0-indexed)
+  __asm__ volatile ("csrrs    zero, mie, %0"
 		    : // no output
-		    : "r" (cicsr_enable_interrupt)
+		    : "r" (meie_enable) // write mtie_enable to %0
 		    : // no clobber
 		    );
-
   
   // enable global interrupts
   uint32_t mie_enable = 0b1000;
@@ -129,21 +131,7 @@ int main() {
 		    : "r" (mie_enable)
 		    :
 		    );
-  */
-  // leave room for code
-  volatile uint32_t* system_sram = (uint32_t*)(SRAM_BASE + 0x200);
-  uint32_t addr = 0;
-  volatile uint32_t* mcu = (uint32_t*)(0xFE7A0000);
-  // test all 32-bit addresses in 0xfe790000-0xfe79ffff for writeability
-  for (int i = 0; i < 0x1fff; i += 4) {
-    mcu[i] = 0x12345678;
-    if (mcu[i] != 0) {
-      system_sram[addr] = (uint32_t)(mcu + i);
-      addr += 4;
-      system_sram[addr] = mcu[i];
-      addr += 4;
-    }
-  }
+  
   while (1);
 
   return 0;

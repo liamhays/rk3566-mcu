@@ -37,6 +37,8 @@
 
 #define MAILBOX_REG_LEN (4)
 
+#define MCU_INTC (0xFE790000)
+#define MCU_INTC_LEN (0xFFFF)
 
 #define SYSTEM_SRAM_BASE (0xFDCC0000)
 #define SYSTEM_SRAM_LEN (0xFFFF)
@@ -74,7 +76,8 @@ static int __init mailbox_init(void) {
 	void* __iomem mailbox_a2b_dat_0;
 	void* __iomem mailbox_a2b_inten;
 	void* __iomem mailbox_b2a_cmd_0;
-
+	void* __iomem mcu_intc;
+	
 	pr_info("mailbox: ENTER mailbox_init()");
 	
 	// Disable clock gate on mailbox and INTMUX
@@ -86,7 +89,6 @@ static int __init mailbox_init(void) {
 	// put MCU, mailbox, and INTMUX in reset
 	cru_softrst_con26 = reserve_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	iowrite32(0xffff0000 | (1 << 12) | (1 << 11) | (1 << 10), cru_softrst_con26);
-	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	
 	pr_info("mailbox: MCU, mailbox, INTMUX reset");
 
@@ -107,26 +109,33 @@ static int __init mailbox_init(void) {
 
 	udelay(10); // Rockchip BSP u-boot does this after writing the address
 	
-	// take MCU, mailbox, and INTMUX out of reset
-	cru_softrst_con26 = reserve_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
-	// this register defaults to 0x400, so we can safely trample the whole thing
-	iowrite32((0xffff0000), cru_softrst_con26); // clear all reset bits, enabling the MCU to run
+	// take INTMUX out of reset
+	iowrite32(0xffff0000 | (1 << 12) | (1 << 10), cru_softrst_con26);
+
+	// enable all the interrupt groups
+	mcu_intc = reserve_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
+	for (int i = 0; i < 32; i++) {
+	  pr_info("addr: %x\n", i*4);
+	  iowrite32(0xff, mcu_intc + (i * 4));
+	}
+	pr_info("regs: %x, %x\n", ioread32(mcu_intc + 0x0064), ioread32(mcu_intc + 0x006C));
+	release_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
+
+	// now enable MCU and mailbox
+	iowrite32(0xffff0000, cru_softrst_con26);
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 
-	// idea: test all registers in MCU_INTC range to see what sticks
-	// the Reserved section at 0xFE7A0000 seems to crash the system on access
-	
-	mdelay(200); // let MCU run
-	
 	// enable mailbox interrupts for A2B_CMD_0 and A2B_DAT_0
-	/*mailbox_a2b_inten = reserve_iomem((phys_addr_t)MAILBOX_A2B_INTEN, MAILBOX_REG_LEN);
+	mailbox_a2b_inten = reserve_iomem((phys_addr_t)MAILBOX_A2B_INTEN, MAILBOX_REG_LEN);
 	iowrite32(0x1, mailbox_a2b_inten);
 	release_iomem((phys_addr_t)MAILBOX_A2B_INTEN, MAILBOX_REG_LEN);
+	
+	mdelay(200); // let MCU run
 	
 	// write to A2B_CMD_0 and A2B_DAT_0 in that order to produce an interrupt
 	mailbox_a2b_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_A2B_CMD_0, MAILBOX_REG_LEN);
 	iowrite32(0x12345678, mailbox_a2b_cmd_0);
-	pr_info("data: %x\n", ioread32(mailbox_a2b_cmd_0));
+	//pr_info("data: %x\n", ioread32(mailbox_a2b_cmd_0));
 	release_iomem((phys_addr_t)MAILBOX_A2B_CMD_0, MAILBOX_REG_LEN);
 	
 	mailbox_a2b_dat_0 = reserve_iomem((phys_addr_t)MAILBOX_A2B_DAT_0, MAILBOX_REG_LEN);
@@ -139,26 +148,8 @@ static int __init mailbox_init(void) {
 	mailbox_b2a_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 	pr_info("mailbox: MAILBOX_B2A_CMD_0 after MCU processes interrupt = %x\n", ioread32(mailbox_b2a_cmd_0));
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
-	*/
-
-	// now grab data from SRAM
-	//for (uint32_t i = 0x200; i < (0xffff); i += 4) {
-	uint32_t i = 0x200;
-	while (i < 0xffff) {
-	  uint32_t a = ioread32(system_sram + i);
-	  if (a == 0) break;
-	  pr_info("address: %x, data: %x\n", a, ioread32(system_sram + i + 4));
-	  i += 8;
-	}
-	/*void* __iomem mcu_intc = reserve_iomem((phys_addr_t)0xFE790000, 0xffff);
-	for (uint32_t i = 0; i < (0x1fff); i += 4) {
-	  iowrite32(0xff, mcu_intc + i);
-	  if (ioread32(mcu_intc + i) != 0) {
-	    pr_info("address %x: %x\n", i, ioread32(mcu_intc + i));
-	  }
-	}
-	release_iomem((phys_addr_t)0xFE790000, 0xffff);*/
 	
+
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
 
 	return 0;
