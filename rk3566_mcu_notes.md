@@ -193,6 +193,13 @@ registers except `MCU_TIMER_CTRL`, `MCU_TIMER_DIV`, `MCU_MTIME`,
 all memory-mapped registers (**not CSRs!**) (see the SCR1 EAS for info
 on these registers).
 
+**Also note:** I have no idea where these are located! The INTMUX
+registers are located in `MCU_INTC` memory space, and the TRM gives
+the impression that the timer registers are in this same
+space. However, that would cause the INTMUX and timer registers to
+overlap, and my probing shows that the `MCU_INTC` space has *only*
+INTMUX registers.
+
 ## MCU memory
 The SCR1 core provides an optional 64KB of tightly coupled
 memory. While the RK3566 provides 64KB `SYSTEM_SRAM`, it does not
@@ -206,38 +213,53 @@ block of memory, so you're free to use it for the MCU.
 `PMU_SRAM` is different and may be useful for sleep modes, since it's
 maintained in some low-power modes.
 
-## MCU interrupts
+# MCU interrupts
 The SCR1 core has a 16-line "Integrated Programmable Interrupt
 Controller", configurable with IPIC CSRs. Interrupt number 0 has the
 lowest priority and interrupt number 16 has the highest priority.
 
 Although the IPIC has 16 input lines, only 4 are used in the
 RK3566. The INTMUX selects one of 4 interrupts out of 256 inputs, and
-interrupts from the IPIC are external interrupts to the RISC-V core.
+interrupts from the IPIC are external interrupts to the RISC-V
+core. The TRM states that "the Interrupt Multiplexer will select 4
+interrupts from 256 interrupts using round robin algorithm". This
+sounds like time division multiplexing to me, and my theory is that
+the INTMUX cycles through all 256 inputs very, very quickly, and each
+time it comes to an enabled interrupt input, it enables the
+smallest-numbered output line that isn't in use. For example, imagine
+that interrupt inputs 0, 10, 34, and 46 are enabled. On the first pass
+around all four enabled interrupts, interrupt 0 fires, triggering the
+INTMUX to enable output line 0. Then, on the next pass, interrupt 10
+fires, and the INTMUX feeds that to line 1. **I have no idea if this
+is accurate, however.**
+
+Another theory I have is that the INTMUX will assign inputs to outputs
+at random, but that doesn't explain why there's four outputs.
 
 You can only write to the IPIC CSRs using the `CSRRW`/`CSRRWI`
 instructions, not the `CSRRS`/`CSRRC` (set/clear CSR bits)
 instructions.
 
-The timer in the RISC-V core feeds the timer interrupt. It works
-exactly like the RISC-V spec describes.
+The approach I've used so far is to set the MCU core to direct
+interrupt mode and branch from there, since I haven't figured out the
+INTMUX-IPIC connections yet.
 
-I don't know how the INTMUX inputs actually map to the IPIC
-inputs. The TRM is not very helpful in its description of how the
-INTMUX works, so I think the best approach to using external
-interrupts is to set the RISC-V to direct interrupt mode, then read
-the INTMUX registers in the handler to figure out who caused the interrupt.
+## INTMUX registers
+The TRM does not explicitly say the base address of the INTMUX the way
+it does for every other peripheral in the chip. However, the MCU
+section of memory is called `MCU_INTC` and is located at 0xFE790000. I
+discovered that this is the INTMUX range by probing the `MCU_INTC`
+section and matching the writable registers to the registers described
+for the INTMUX.
 
-### INTMUX registers
-I have literally no idea where in memory these are located. The TRM
-provides no information on the INTMUX base address, and probing the
-MCU space has not been fruitful. From Linux, address 0x00 to 0x7c
-inclusive at offset 0, 0x1000, ... relative to MCU space (0xFE790000)
-seem to be able to hold values. However, 0x88 and then 0x100-0xfff for
-the rest of that 0x1000-sized space holds some amount of data. It
-looks like only 2 bits but it's hard to say because writing and
-reading data in MCU space from Linux seems iffy at best, so take this
-with a grain of salt.
+The INTMUX registers and RISC-V timer registers appear to overlap. You
+can create a timer interrupt by enabling the global RISC-V timer
+interrupt, setting the value of `mtimecmp`, and resetting `mtime`. The
+timer defaults to running. However, it seems that if you go and try to
+read `mtime`, you'll get the value of the INTMUX register at that
+location. This *kind of* gives me the impression that writes to the
+`MCU_INTC` region go to both the top 6 timer registers *and* the
+INTMUX registers.
 
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every
