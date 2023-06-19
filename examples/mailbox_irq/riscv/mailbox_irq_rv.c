@@ -28,15 +28,21 @@
 // kernel module controls INTMUX clock and reset
 
 // could intmux base be in MCU_INTC section of memory? (MCU_BASE)
-#define INTMUX_BASE (0xFE798000) // what is the base address?
+#define INTMUX_BASE (0xFE790000) // what is the base address?
+#define INTMUX_INT_MASK_GROUP0 (INTMUX_BASE)
 #define INTMUX_INT_MASK_GROUP25 (INTMUX_BASE + 0x0064)
 #define INTMUX_INT_MASK_GROUP27 (INTMUX_BASE + 0x006C)
+
+#define INTMUX_INT_FLAG_GROUP2 (INTMUX_BASE + 0x0088)
 #define INTMUX_INT_FLAG_LEVEL2 (INTMUX_BASE + 0x0100)
 
 #define SRAM_BASE (0xFDCC0000)
 
+volatile uint32_t* intmux_int_mask_group0 = (uint32_t*)INTMUX_INT_MASK_GROUP0;
 volatile uint32_t* intmux_int_mask_group25 = (uint32_t*)INTMUX_INT_MASK_GROUP25;
 volatile uint32_t* intmux_int_mask_group27 = (uint32_t*)INTMUX_INT_MASK_GROUP27;
+
+volatile uint32_t* intmux_int_flag_group2 = (uint32_t*)INTMUX_INT_FLAG_GROUP2;
 volatile uint32_t* intmux_int_flag_level2 = (uint32_t*)INTMUX_INT_FLAG_LEVEL2;
 
 volatile uint32_t* mailbox_b2a_cmd_0 = (uint32_t*)MAILBOX_B2A_CMD_0;
@@ -65,8 +71,9 @@ csrw    mie, zero \n    # disable interrupts"
   *mailbox_a2b_status = 1;
 
   // update B2A_CMD_0 to notify kernel module
-  *mailbox_b2a_cmd_0 = 0xabababab;
-
+  //*mailbox_b2a_cmd_0 = *intmux_int_flag_group2;
+  //*mailbox_b2a_cmd_0 = *intmux_int_flag_level2;
+  *mailbox_b2a_cmd_0 = *intmux_int_mask_group0;
   
   // clear IPIC interrupt pending flag (optional?)
   __asm__ volatile ("csrw    %0,%1"
@@ -100,7 +107,7 @@ int main() {
   // interrupt enable is bit 1 (0-indexed)
 
   // enable all 16 interrupts in ICSR
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 1; i++) {
     // set the IPIC index register to the current interrupt
     __asm__ volatile ("csrw   %0, %1"
 		      : // no output

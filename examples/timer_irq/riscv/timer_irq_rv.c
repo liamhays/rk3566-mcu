@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+// This example currently doesn't actually do anything, because I need to find the timer base address!
 #define MAILBOX_BASE (0xFE780000)
 #define MAILBOX_B2A_CMD_0 (MAILBOX_BASE + 0x0030)
 #define MAILBOX_B2A_DAT_0 (MAILBOX_BASE + 0x0034)
@@ -82,11 +83,11 @@ int main() {
   // set low 32 bits of MTIMECMP to 0x100 (something low)
   
   // writing all 1s prevent problems caused by intermediate values
-  *mtimecmp = 0xffffffffffffffff;
-  *mtimecmp = 0x100;
+  //*mtimecmp = 0xffffffffffffffff;
+  //*mtimecmp = 0x100;
 
   // reset the timer so the interrupt actually fires
-  *mtime = 0;
+  //*mtime = 0;
   while (1);
 
   return 0;

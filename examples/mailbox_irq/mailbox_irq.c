@@ -115,10 +115,8 @@ static int __init mailbox_init(void) {
 	// enable all the interrupt groups
 	mcu_intc = reserve_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
 	for (int i = 0; i < 32; i++) {
-	  pr_info("addr: %x\n", i*4);
 	  iowrite32(0xff, mcu_intc + (i * 4));
 	}
-	pr_info("regs: %x, %x\n", ioread32(mcu_intc + 0x0064), ioread32(mcu_intc + 0x006C));
 	release_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
 
 	// now enable MCU and mailbox
