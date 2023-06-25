@@ -4,13 +4,12 @@
 // companion kernel module. It then updates MAILBOX_B2A_CMD_0 when the
 // interrupt is fired.
 #define MAILBOX_BASE (0xFE780000)
+#define MAILBOX_A2B_STATUS (MAILBOX_BASE + 0x0004)
 #define MAILBOX_A2B_CMD_0 (MAILBOX_BASE + 0x0008)
 #define MAILBOX_A2B_DAT_0 (MAILBOX_BASE + 0x000C)
-#define MAILBOX_A2B_STATUS (MAILBOX_BASE + 0x0004)
+#define MAILBOX_B2A_STATUS (MAILBOX_BASE + 0x002C)
 #define MAILBOX_B2A_CMD_0 (MAILBOX_BASE + 0x0030)
 #define MAILBOX_B2A_DAT_0 (MAILBOX_BASE + 0x0034)
-#define MAILBOX_B2A_STATUS (MAILBOX_BASE + 0x002C)
-
 
 // also the "INTC" base in Rockchip register space
 #define MCU_BASE (0xFE790000)
@@ -27,8 +26,7 @@
 
 // kernel module controls INTMUX clock and reset
 
-// could intmux base be in MCU_INTC section of memory? (MCU_BASE)
-#define INTMUX_BASE (0xFE790000) // what is the base address?
+#define INTMUX_BASE (0xFE798000)
 #define INTMUX_INT_MASK_GROUP0 (INTMUX_BASE)
 #define INTMUX_INT_MASK_GROUP25 (INTMUX_BASE + 0x0064)
 #define INTMUX_INT_MASK_GROUP27 (INTMUX_BASE + 0x006C)
@@ -45,10 +43,14 @@ volatile uint32_t* intmux_int_mask_group27 = (uint32_t*)INTMUX_INT_MASK_GROUP27;
 volatile uint32_t* intmux_int_flag_group2 = (uint32_t*)INTMUX_INT_FLAG_GROUP2;
 volatile uint32_t* intmux_int_flag_level2 = (uint32_t*)INTMUX_INT_FLAG_LEVEL2;
 
+volatile uint32_t* mailbox_a2b_cmd_0 = (uint32_t*)MAILBOX_A2B_CMD_0;
+volatile uint32_t* mailbox_a2b_dat_0 = (uint32_t*)MAILBOX_A2B_DAT_0;
 volatile uint32_t* mailbox_b2a_cmd_0 = (uint32_t*)MAILBOX_B2A_CMD_0;
 volatile uint32_t* mailbox_b2a_dat_0 = (uint32_t*)MAILBOX_B2A_DAT_0;
 volatile uint32_t* mailbox_a2b_status = (uint32_t*)MAILBOX_A2B_STATUS;
+volatile uint32_t* mailbox_b2a_status = (uint32_t*)MAILBOX_B2A_STATUS;
 
+volatile uint32_t* mcu_timecmp = (uint32_t*)(0x490000);
 // Under GCC, interrupt functions must have the interrupt attribute
 static void irq_entry() __attribute__ ((interrupt ("machine")));
 
@@ -58,33 +60,34 @@ static void irq_entry() __attribute__ ((interrupt ("machine")));
 // bits (32-26 = 6, 2**6 = 64)
 #pragma GCC optimize ("align-functions=64")
 void irq_entry() {
+  //uint32_t isvr = 0;
+  // our mystery interrupt seems to go to IPIC line 0
+  
   // write to SOI and EOI, apparently you can do this together at once
   __asm__ volatile ("\
 csrw    0xBF5, zero \n	# write to SOI \
-csrw    0xBF4, zero \n  # write to EOI \
 csrw    mie, zero \n    # disable interrupts"
 		    : // no input
 		    : // no output
 		    : // no clobber
 		    );
   // clear the mailbox interrupt by writing 1 to bit 0 of MAILBOX_A2B_STATUS  
-  *mailbox_a2b_status = 1;
-
+  *mailbox_a2b_status = 0xff;
   // update B2A_CMD_0 to notify kernel module
-  //*mailbox_b2a_cmd_0 = *intmux_int_flag_group2;
-  //*mailbox_b2a_cmd_0 = *intmux_int_flag_level2;
-  *mailbox_b2a_cmd_0 = *intmux_int_mask_group0;
-  
+  *mailbox_b2a_cmd_0 = *mcu_timecmp;
+  *mailbox_b2a_dat_0 = 0xc409abcd;
   // clear IPIC interrupt pending flag (optional?)
   __asm__ volatile ("csrw    %0,%1"
 		    : // no input
 		    : "i" (MCU_CSR_IPIC_CICSR), "r" (0) // clear pending and disable interrupt
 		    : // no clobber
 		    );
+  __asm__ volatile("csrw    0xBF4, zero \n  # write to EOI" : : :);
 }
 #pragma GCC pop_options
 
 int main() {
+  //*mcu_timecmp = 0xdeadbeef;
   // set vector address in mtvec and use direct mode (INTMUX
   // connection to IPIC lines is unclear)
   uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
@@ -94,17 +97,6 @@ int main() {
 		    : // no clobber
 		    );
   
-
-  // mailbox A2B interrupts are enabled by kernel module
-  
-  // A2B interrupt is *probably* `mailbox_ca55[0]`, which is GIC
-  // interrupt 215. This maps to INTMUX_INT_MASK_GROUP25 bit 6 (0-indexed).
-
-  // mailbox_mcu[0] is GIC 219. This maps to INTMUX_INT_MASK_GROUP27 bit 3
-  //*intmux_int_mask_group25 = (0xff);
-  //*intmux_int_mask_group27 = (0xff);
-  
-  // interrupt enable is bit 1 (0-indexed)
 
   // enable all 16 interrupts in ICSR
   for (int i = 0; i < 1; i++) {
@@ -130,7 +122,7 @@ int main() {
 		    : "r" (meie_enable) // write mtie_enable to %0
 		    : // no clobber
 		    );
-  
+
   // enable global interrupts
   uint32_t mie_enable = 0b1000;
   __asm__ volatile ("csrrs    zero, mstatus, %0"

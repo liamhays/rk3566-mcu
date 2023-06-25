@@ -5,9 +5,6 @@
 #include <linux/regmap.h>
 #include <linux/ioport.h>
 
-// I *know* that storing data in header files is not optimal, since if
-// you get a lot of data it takes a long time to recompile. but it's
-// like 30 bytes.
 #include "riscv/build/mailbox_irq_rv_bin.h"
 
 #define SYS_GRF_BASE (0xFDC60000)
@@ -29,15 +26,20 @@
 #define MAILBOX_A2B_STATUS (MAILBOX_BASE + 0x0004)
 #define MAILBOX_A2B_CMD_0 (MAILBOX_BASE + 0x0008)
 #define MAILBOX_A2B_DAT_0 (MAILBOX_BASE + 0x000C)
+#define MAILBOX_A2B_CMD_1 (MAILBOX_BASE + 0x0010)
+#define MAILBOX_A2B_DAT_1 (MAILBOX_BASE + 0x0014)
 
+#define MAILBOX_B2A_INTEN (MAILBOX_BASE + 0x0028)
+#define MAILBOX_B2A_STATUS (MAILBOX_BASE + 0x002C)
 #define MAILBOX_B2A_CMD_0 (MAILBOX_BASE + 0x0030)
 #define MAILBOX_B2A_DAT_0 (MAILBOX_BASE + 0x0034)
-#define MAILBOX_B2A_STATUS (MAILBOX_BASE + 0x002C)
-#define MAILBOX_B2A_INTEN (MAILBOX_BASE + 0x0028)
+
+#define MAILBOX_CMD MAILBOX_A2B_CMD_1
+#define MAILBOX_DAT MAILBOX_A2B_DAT_1
 
 #define MAILBOX_REG_LEN (4)
 
-#define MCU_INTC (0xFE790000)
+#define MCU_INTC (0xFE798000)
 #define MCU_INTC_LEN (0xFFFF)
 
 #define SYSTEM_SRAM_BASE (0xFDCC0000)
@@ -72,10 +74,10 @@ static int __init mailbox_init(void) {
 	void* __iomem grf_soc_con4;
 	void* __iomem cru_gate_con32;
 	void* __iomem cru_softrst_con26;
-	void* __iomem mailbox_a2b_cmd_0;
-	void* __iomem mailbox_a2b_dat_0;
+	void* __iomem mailbox_cmd;
+	void* __iomem mailbox_dat;
 	void* __iomem mailbox_a2b_inten;
-	void* __iomem mailbox_b2a_cmd_0;
+	void* __iomem mailbox_b2a_inten;
 	void* __iomem mcu_intc;
 	
 	pr_info("mailbox: ENTER mailbox_init()");
@@ -114,10 +116,40 @@ static int __init mailbox_init(void) {
 
 	// enable all the interrupt groups
 	mcu_intc = reserve_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
-	for (int i = 0; i < 32; i++) {
-	  iowrite32(0xff, mcu_intc + (i * 4));
-	}
-	release_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
+	
+	iowrite32(0xff, mcu_intc + 0x00); // group 00
+	iowrite32(0xff, mcu_intc + 0x04); // group 01
+	//iowrite32(0xff, mcu_intc + 0x08); // group 02
+	iowrite32(0xff, mcu_intc + 0x0C); // group 03
+	iowrite32(0xff, mcu_intc + 0x10); // group 04
+	iowrite32(0xff, mcu_intc + 0x14); // group 05
+	iowrite32(0xff, mcu_intc + 0x18); // group 06
+	iowrite32(0xff, mcu_intc + 0x1C); // group 07
+	iowrite32(0xff, mcu_intc + 0x20); // group 08
+	iowrite32(0xff, mcu_intc + 0x24); // group 09
+	iowrite32(0xff, mcu_intc + 0x28); // group 10
+	iowrite32(0xff, mcu_intc + 0x2C); // group 11
+	iowrite32(0xff, mcu_intc + 0x30); // group 12
+	iowrite32(0xff, mcu_intc + 0x34); // group 13
+	iowrite32(0xff, mcu_intc + 0x38); // group 14
+	iowrite32(0xff, mcu_intc + 0x3C); // group 15
+	iowrite32(0xff, mcu_intc + 0x40); // group 16
+	iowrite32(0xff, mcu_intc + 0x44); // group 17
+	iowrite32(0xff, mcu_intc + 0x48); // group 18
+	iowrite32(0xff, mcu_intc + 0x4C); // group 19
+	iowrite32(0xff, mcu_intc + 0x50); // group 20
+	iowrite32(0xff, mcu_intc + 0x54); // group 21
+	iowrite32(0xff, mcu_intc + 0x58); // group 22
+	iowrite32(0xff, mcu_intc + 0x5C); // group 23
+	iowrite32(0xff, mcu_intc + 0x60); // group 24
+	iowrite32(0xff, mcu_intc + 0x64); // group 25
+	iowrite32(0xff, mcu_intc + 0x68); // group 26
+	iowrite32(0xff, mcu_intc + 0x6C); // group 27
+	iowrite32(0xff, mcu_intc + 0x70); // group 28
+	iowrite32(0xff, mcu_intc + 0x74); // group 29
+	iowrite32(0xff, mcu_intc + 0x78); // group 30
+	iowrite32(0xff, mcu_intc + 0x7C); // group 31
+
 
 	// now enable MCU and mailbox
 	iowrite32(0xffff0000, cru_softrst_con26);
@@ -125,31 +157,41 @@ static int __init mailbox_init(void) {
 
 	// enable mailbox interrupts for A2B_CMD_0 and A2B_DAT_0
 	mailbox_a2b_inten = reserve_iomem((phys_addr_t)MAILBOX_A2B_INTEN, MAILBOX_REG_LEN);
-	iowrite32(0x1, mailbox_a2b_inten);
+	iowrite32(0b10, mailbox_a2b_inten);
 	release_iomem((phys_addr_t)MAILBOX_A2B_INTEN, MAILBOX_REG_LEN);
+
+	mailbox_b2a_inten = reserve_iomem((phys_addr_t)MAILBOX_B2A_INTEN, MAILBOX_REG_LEN);
+	//iowrite32(0b1111, mailbox_b2a_inten);
+	release_iomem((phys_addr_t)MAILBOX_B2A_INTEN, MAILBOX_REG_LEN);
 	
 	mdelay(200); // let MCU run
 	
-	// write to A2B_CMD_0 and A2B_DAT_0 in that order to produce an interrupt
-	mailbox_a2b_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_A2B_CMD_0, MAILBOX_REG_LEN);
-	iowrite32(0x12345678, mailbox_a2b_cmd_0);
-	//pr_info("data: %x\n", ioread32(mailbox_a2b_cmd_0));
-	release_iomem((phys_addr_t)MAILBOX_A2B_CMD_0, MAILBOX_REG_LEN);
+	// write to CMD and DAT in that order to produce an interrupt
+	mailbox_cmd = reserve_iomem((phys_addr_t)MAILBOX_CMD, MAILBOX_REG_LEN);
+	iowrite32(0x12345678, mailbox_cmd);
+	release_iomem((phys_addr_t)MAILBOX_CMD, MAILBOX_REG_LEN);
 	
-	mailbox_a2b_dat_0 = reserve_iomem((phys_addr_t)MAILBOX_A2B_DAT_0, MAILBOX_REG_LEN);
-	iowrite32(0x90abcdef, mailbox_a2b_dat_0);
-	release_iomem((phys_addr_t)MAILBOX_A2B_DAT_0, MAILBOX_REG_LEN);
+	mailbox_dat = reserve_iomem((phys_addr_t)MAILBOX_DAT, MAILBOX_REG_LEN);
+	iowrite32(0x90abcdef, mailbox_dat);
+	release_iomem((phys_addr_t)MAILBOX_DAT, MAILBOX_REG_LEN);
 	
 	mdelay(50); // let MCU process interrupt
 
+	char str[1000] = {0};
+	for (int i = 0x80; i <= 0x100; i += 4) {
+	  sprintf(str, "%s%x, ", str, ioread32(mcu_intc + i));
+	}
+	pr_info("mailbox: %s\n", str);
 	// read mailbox register
-	mailbox_b2a_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
-	pr_info("mailbox: MAILBOX_B2A_CMD_0 after MCU processes interrupt = %x\n", ioread32(mailbox_b2a_cmd_0));
+	mailbox_cmd = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
+	mailbox_dat = reserve_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
+	pr_info("mailbox: MAILBOX_B2A_CMD_0 = 0x%x, MAILBOX_B2A_DAT_0 = 0x%x\n",
+		ioread32(mailbox_cmd), ioread32(mailbox_dat));
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
-	
+	release_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
 
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
-
+	release_iomem((phys_addr_t)MCU_INTC, MCU_INTC_LEN);
 	return 0;
 }
 
