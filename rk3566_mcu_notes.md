@@ -11,8 +11,8 @@ changes](https://www.96rocks.com/blog/2020/11/28/introduce-rockchip-rk3568/)
 (scroll down to the end of the page).
 
 If you reference the [RISC-V ISA
-spec](https://riscv.org/technical/specifications/), be sure to use the
-privileged spec document.
+spec](https://riscv.org/technical/specifications/), be sure to include
+the privileged spec document.
 
 Helpful hint: `|` next to a signal name is
 the Verilog bit-reduction operator, which is equivalent to ANDing all
@@ -537,8 +537,9 @@ Cortex-A7, for example).
 The `rockchip-mailbox` driver in the Linux kernel source implements a
 mailbox interface for the RK3368, at least according to the
 `compatible` field. This driver uses the same register offsets as the
-RK3368, and `rk3566_mbox.dts` is device tree overlay source that may
-work with the RK3566, but I haven't tested it yet.
+RK3368, and `rk3566_mbox.dts` is device tree overlay source that
+*should* work with the RK3566---it's straight from the Rockchip BSP
+Linux source---but I still need to test it.
 
 **Update:** This would probably work if the Rockchip mailbox driver
 were compiled into the Plebian kernel. I discussed this on the bridged
