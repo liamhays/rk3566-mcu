@@ -50,8 +50,6 @@ the Makefile, but here are the flags I've used with success:
 - `-Wall -lgcc`: Enable warnings and link to `libgcc.a`, used for
   hardware compatibility.
 
-
-
 # RK3566 MCU hardware
 ## RK3566 MCU registers
 These registers *control* the MCU in the context of the RK3566 as a

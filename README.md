@@ -4,19 +4,25 @@ the RISC-V MCU found inside the Rockchip RK3566 SoC used in the Pine64
 Quartz64, PineTab2, and PineNote. Documentation is in
 `rk3566_mcu_notes.md`.
 
-To start programming the MCU in C and control it from the Linux
-kernel, look at `examples/hello_mailbox`. This is a very basic
-example that compiles some C into a binary for the MCU that writes one
-value to a mailbox register. The kernel module for this example resets
-the MCU and mailbox, writes the MCU program to system SRAM, runs the
-MCU, and then reads the mailbox register.
+What's documented:
+- Development environment in C
+- Info about the core
+- How to boot the MCU
+- Some system-level MCU configuration registers
+- INTMUX interrupt mapping (needs more testing but should be accurate)
+  and register location
 
 
+What's left:
+- Configuring the MCU timer and finding its base address
+- Using the `rockchip-mailbox` Linux driver---diederik put in a [pull
+  request to
+  Debian](https://salsa.debian.org/kernel-team/linux/-/merge_requests/730)
+  to enable the `CONFIG_ROCKCHIP_MBOX` kernel flag, and it has been
+  merged...it will appear in Plebian eventually.
+- Using the MCU as a wakeup source, which depends on support for
+  suspend of whatever type for the RK3566.
 
-# TODO
-- use the `rockchip-mailbox` driver in the Linux kernel to access the
-mailbox (see `rk3566_mcu_notes.md` for more info on this)
-- configure the IPIC in the MCU and the INTMUX that connects it to the
-wider RK3566 world
-- use MCU as wakeup source (what sleep support is in the kernel for
-the RK3566 currently?)
+
+# Using the MCU
+See `examples` for code examples.
