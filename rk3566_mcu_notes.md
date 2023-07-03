@@ -106,6 +106,22 @@ over AHB. Presumably there is some kind of buffer between the AHB and
 AXI buses in the interconnect block, controllable with the `flush`
 bits.
 
+`mcu_sel_axi`...sets the MCU to use either the AHB or AXI bus. I think
+this is more complicated than it sounds, however:
+
+- The SCR1 core has AHB-Lite and AXI4 bus interfaces. It does not
+  appear to require you to use one interface exclusively, but there
+  also appears to be no way to tell the SCR1 which bus to use.
+- The RK3566 TRM chapter on the MCU shows a block diagram where the I
+  and D buses from the SCR1 are called `I_BUS_AHB` and `D_BUS_AHB` and
+  both go to a block called `INTERCONNECT`. This suggests to me that
+  the SCR1 is connected to the rest of the RK3566 through *only* the
+  AHB bus.
+- However, the existence of the `ahb2axi_*_flush` bits suggests that
+  the AHB<->AXI interconnect for the MCU has buffers for the I and D
+  buses.
+- 
+
 I have tested `mcu_sel_axi` once and it appeared to make the MCU not
 work anymore. Still needs further testing. It seems possible that both
 the AHB and AXI bus connections on the MCU are in use, and you can

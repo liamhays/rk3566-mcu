@@ -108,9 +108,9 @@ static int __init mailbox_init(void) {
 
 	mdelay(200); // let MCU run
 
-	// assert interrupt request
+	// assert interrupt request and set MCU to use AXI bus (just for fun on this example)
 	grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	iowrite32((1 << (12+16)) | (1 << 12), grf_soc_con3);
+	iowrite32((1 << (12+16)) | (1 << (13+16)) | (1 << 13) | (1 << 12), grf_soc_con3);
 	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
 	
 	mdelay(100); // let MCU process interrupt
