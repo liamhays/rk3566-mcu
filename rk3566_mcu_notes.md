@@ -98,14 +98,26 @@ instruction. **TODO: test this.**
 | 13    | RW   | 0x0         | `mcu_sel_axi`, 0=MCU uses AHB bus, 1=MCU uses AXI bus |
 | 12    | RW   | 0x0         | `mcu_soft_irq`, "MCU soft interrupt request"          |
 
-No idea what the exact purpose of these are. The SCR1 core supports
-both AHB-Lite and AXI4 bus connections, but it appears from the
-Rockchip MCU block diagram that the MCU is connected over AHB.
+I still need to test these more. However, I have some theories.
+
+The SCR1 core supports both AHB-Lite and AXI4 bus connections, but it
+appears from the Rockchip MCU block diagram that the MCU is connected
+over AHB. Presumably there is some kind of buffer between the AHB and
+AXI buses in the interconnect block, controllable with the `flush`
+bits.
 
 I have tested `mcu_sel_axi` once and it appeared to make the MCU not
-work anymore. Still needs further testing. The two `flush` registers
-likely flush buffers that sit between the AHB and AXI buses inside the
-RK3566. I have no idea what `mcu_soft_irq` indicates.
+work anymore. Still needs further testing. It seems possible that both
+the AHB and AXI bus connections on the MCU are in use, and you can
+choose with this flag: the SCR1 does not appear to exclusively use one
+bus. The only qualm I have with this theory is that the block diagram
+in the RK3566 reference manual shows `D_BUS_AHB` and `I_BUS_AHB` going
+to the bus interconnect.
+
+`mcu_soft_irq` is the `soft_irq` (software interrupt) signal described
+on page 86 of the SCR1 EAS. By asserting this bit, you can trigger a
+software interrupt in the MCU. See the `soft_irq` example for
+details---it's not very complicated.
 
 ## `GRF_SOC_CON4`
 | Bit   | Attr | Reset value | Description                       |
