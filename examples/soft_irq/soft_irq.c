@@ -94,6 +94,11 @@ static int __init mailbox_init(void) {
 	}
 	memcpy_toio(system_sram, soft_irq_rv_bin, soft_irq_rv_bin_len);
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
+
+	// set the MCU to use the AXI bus (just for fun in this example)
+	grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
+	iowrite32((1 << (13+16)) | (1 << 13), grf_soc_con3);
+	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
 	
 	// write the high bits of the boot address to the boot address register
 	grf_soc_con4 = reserve_iomem((phys_addr_t)GRF_SOC_CON4, GRF_SOC_CON4_LEN);
@@ -108,9 +113,9 @@ static int __init mailbox_init(void) {
 
 	mdelay(200); // let MCU run
 
-	// assert interrupt request and set MCU to use AXI bus (just for fun on this example)
+	// assert interrupt request
 	grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	iowrite32((1 << (12+16)) | (1 << (13+16)) | (1 << 13) | (1 << 12), grf_soc_con3);
+	iowrite32((1 << (12+16)) | (1 << 12), grf_soc_con3);
 	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
 	
 	mdelay(100); // let MCU process interrupt
