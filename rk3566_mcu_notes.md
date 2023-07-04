@@ -85,9 +85,12 @@ nuisance for the rest of the chip.
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits |
 | 27    | RW   | 0x0         | `wfi_halted` status from MCU |
 
-There is no `wfi_halted` signal described in either the SCR1 UM or
-EAS. I assume that this bit is set to 1 when the MCU runs the `wfi`
-instruction. **TODO: test this.**
+`wfi_halted` is asserted when the MCU runs the `wfi` (wait for
+interrupt) instruction. I assume it's de-asserted on MCU reset or when
+MCU leaves `wfi` state.
+
+**TODO**: This register also has stuff for `buf_flush`
+status. `GRF_SOC_CON6` also has ahb2axi control bits.
 
 ## `GRF_SOC_CON3`
 | Bit   | Attr | Reset value | Description                                           |
@@ -586,3 +589,7 @@ Information in this section may be completely untrue or untested.
   not really a limitation because there's `A2B` and `B2A` registers.
   
   **This seems to be a lie.**
+
+
+# tools
+`27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`
