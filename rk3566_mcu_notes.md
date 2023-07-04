@@ -85,9 +85,12 @@ nuisance for the rest of the chip.
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits |
 | 27    | RW   | 0x0         | `wfi_halted` status from MCU |
 
-There is no `wfi_halted` signal described in either the SCR1 UM or
-EAS. I assume that this bit is set to 1 when the MCU runs the `wfi`
-instruction. **TODO: test this.**
+`wfi_halted` is asserted when the MCU runs the `wfi` (wait for
+interrupt) instruction. I assume it's de-asserted on MCU reset or when
+MCU leaves `wfi` state.
+
+**TODO**: This register also has stuff for `buf_flush`
+status. `GRF_SOC_CON6` also has ahb2axi control bits.
 
 ## `GRF_SOC_CON3`
 | Bit   | Attr | Reset value | Description                                           |
@@ -98,16 +101,15 @@ instruction. **TODO: test this.**
 | 13    | RW   | 0x0         | `mcu_sel_axi`, 0=MCU uses AHB bus, 1=MCU uses AXI bus |
 | 12    | RW   | 0x0         | `mcu_soft_irq`, "MCU soft interrupt request"          |
 
-I still need to test these more. However, I have some theories.
-
 The SCR1 core supports both AHB-Lite and AXI4 bus connections, but it
 appears from the Rockchip MCU block diagram that the MCU is connected
 over AHB. Presumably there is some kind of buffer between the AHB and
 AXI buses in the interconnect block, controllable with the `flush`
-bits.
+bits. (I haven't tested anything with these two bits yet).
 
-`mcu_sel_axi`...sets the MCU to use either the AHB or AXI bus. I think
-this is more complicated than it sounds, however:
+`mcu_sel_axi` sets the MCU to use either the AHB or AXI bus. Enabling
+it makes the MCU work exactly as it does with the bit disabled. I
+think this is actually slightly more complicated than it sounds:
 
 - The SCR1 core has AHB-Lite and AXI4 bus interfaces. It does not
   appear to require you to use one interface exclusively, but there
@@ -120,20 +122,25 @@ this is more complicated than it sounds, however:
 - However, the existence of the `ahb2axi_*_flush` bits suggests that
   the AHB<->AXI interconnect for the MCU has buffers for the I and D
   buses.
-- 
 
-I have tested `mcu_sel_axi` once and it appeared to make the MCU not
-work anymore. Still needs further testing. It seems possible that both
-the AHB and AXI bus connections on the MCU are in use, and you can
-choose with this flag: the SCR1 does not appear to exclusively use one
-bus. The only qualm I have with this theory is that the block diagram
-in the RK3566 reference manual shows `D_BUS_AHB` and `I_BUS_AHB` going
-to the bus interconnect.
+My theory is that Rockchip enabled only the AHB interface on the SCR1
+to save silicon space, and used an existing AHB<->AXI IP block with an
+added toggle. This doesn't really make a lot of sense---what
+particular reason would require the MCU to sit on AXI---but I guess
+the option exists.
+
+Another possibility is that the MCU has both bus interfaces connected,
+but certain buses are only usable in certain power conditions. For
+example, the AXI bus might not be usable in a low-power state, while
+the AHB bus would. **I have no evidence for this theory.**
 
 `mcu_soft_irq` is the `soft_irq` (software interrupt) signal described
 on page 86 of the SCR1 EAS. By asserting this bit, you can trigger a
 software interrupt in the MCU. See the `soft_irq` example for
-details---it's not very complicated.
+details---it's not very complicated. This example also sets
+`mcu_sel_axi`, to show that the MCU still works with it enabled.
+
+See the "ahb2axi" section below for some ahb2axi investigation.
 
 ## `GRF_SOC_CON4`
 | Bit   | Attr | Reset value | Description                       |
@@ -304,6 +311,9 @@ instructions.
 The approach I've used so far is to set the MCU core to direct
 interrupt mode and branch from there, since I haven't figured out the
 INTMUX-IPIC connections yet.
+
+**Note:** the `edp` interrupt appears to be continuously firing. I
+reported this in the Quartz64 bridged chat, we'll see what happens.
 
 ## INTMUX registers
 The TRM does not explicitly say the base address of the INTMUX the way
@@ -539,6 +549,21 @@ that don't map to INTMUX inputs are the PPIs at the start.
 | 249           | nerrirq[4]                     | 281        |
 | 250           | nclusterpmuirq                 | 282        |
 
+# ahb2axi
+There are two ahb2axi interrupts: `ahb2axi_i` and `ahb2axi_d`. These
+interrupts and the following registers are the only mention of the
+term `ahb2axi` in either part of the RK3566 TRM.
+
+## Registers
+| Register       | Bit | Attr | Reset Value | Name                      |
+|----------------|-----|------|-------------|---------------------------|
+| `GRF_SOC_CON3` | 15  | RW   | 0x0         | `mcu_ahb2axi_d_buf_flush` |
+| `GRF_SOC_CON3` | 14  | RW   | 0x0         | `mcu_ahb2axi_i_buf_flush` |
+|----------------|-----|------|-------------|---------------------------|
+| `GRF_SOC_CON6` | 9   | RW   | 0x0         | `ahb2axi_d_rd_clean`      |
+| `GRF_SOC_CON6` | 8   | RW   | 0x0         | `ahb2axi_i_rd_clean`      |
+| `GRF_SOC_CON6` | 7:0 | RW   | 0xff        | `ahb2axi_d_timeout`       |
+
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every
 register can be accessed by both the ARM cores and the MCU. From Linux
@@ -577,13 +602,6 @@ through the kernel driver will have to wait a bit.
 # Oddities
 Information in this section may be completely untrue or untested.
 
-- It appears, though it's hard to say, that if the ARM cores write to
-  a CMD/DAT mailbox register pair, then if the MCU tries to write to
-  that same pair, that write will fail. For example, if the ARM cores
-  write to `A2B_CMD_0`, then to `A2B_DAT_0`, creating an interrupt, if
-  the MCU then tries to write to those same registers, nothing will
-  happen. I don't know if this is a problem with my code (certainly
-  possible, though the same code works with `A2B` and `B2A`), but it's
-  not really a limitation because there's `A2B` and `B2A` registers.
-  
-  **This seems to be a lie.**
+
+# tools
+`27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`
