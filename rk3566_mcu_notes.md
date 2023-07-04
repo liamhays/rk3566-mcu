@@ -104,10 +104,11 @@ The SCR1 core supports both AHB-Lite and AXI4 bus connections, but it
 appears from the Rockchip MCU block diagram that the MCU is connected
 over AHB. Presumably there is some kind of buffer between the AHB and
 AXI buses in the interconnect block, controllable with the `flush`
-bits.
+bits. (I haven't tested anything with these two bits yet).
 
-`mcu_sel_axi`...sets the MCU to use either the AHB or AXI bus. I think
-this is more complicated than it sounds, however:
+`mcu_sel_axi` sets the MCU to use either the AHB or AXI bus. Enabling
+it makes the MCU work exactly as it does with the bit disabled. I
+think this is actually slightly more complicated than it sounds:
 
 - The SCR1 core has AHB-Lite and AXI4 bus interfaces. It does not
   appear to require you to use one interface exclusively, but there
@@ -120,20 +121,18 @@ this is more complicated than it sounds, however:
 - However, the existence of the `ahb2axi_*_flush` bits suggests that
   the AHB<->AXI interconnect for the MCU has buffers for the I and D
   buses.
-- 
 
-I have tested `mcu_sel_axi` once and it appeared to make the MCU not
-work anymore. Still needs further testing. It seems possible that both
-the AHB and AXI bus connections on the MCU are in use, and you can
-choose with this flag: the SCR1 does not appear to exclusively use one
-bus. The only qualm I have with this theory is that the block diagram
-in the RK3566 reference manual shows `D_BUS_AHB` and `I_BUS_AHB` going
-to the bus interconnect.
+My theory is that Rockchip enabled only the AHB interface on the SCR1
+to save silicon space, and used an existing AHB<->AXI IP block with an
+added toggle. This doesn't really make a lot of sense---what
+particular reason would require the MCU to sit on AXI---but I guess
+the option exists.
 
 `mcu_soft_irq` is the `soft_irq` (software interrupt) signal described
 on page 86 of the SCR1 EAS. By asserting this bit, you can trigger a
 software interrupt in the MCU. See the `soft_irq` example for
-details---it's not very complicated.
+details---it's not very complicated. This example also sets
+`mcu_sel_axi`, to show that the MCU still works with it enabled.
 
 ## `GRF_SOC_CON4`
 | Bit   | Attr | Reset value | Description                       |
