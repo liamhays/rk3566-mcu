@@ -32,6 +32,8 @@
 #define MAILBOX_ATOMIC_LOCK_0 (MAILBOX_BASE + 0x0100)
 #define MAILBOX_REG_LEN (4)
 
+#define RESERVED_BASE (0xFE7A0000)
+
 #define SYSTEM_SRAM_BASE (0xFDCC0000)
 #define SYSTEM_SRAM_LEN (0xFFFF)
 
@@ -59,14 +61,20 @@ void release_iomem(phys_addr_t addr, resource_size_t size) {
 // The issue with the mailbox registers not working was that the clock
 // gate was enabled. This is surely taken care of by the
 // rockchip-mailbox driver.
-static int __init mailbox_init(void) {
+static int __init timer_irq_init(void) {
 	void* __iomem system_sram;
 	void* __iomem grf_soc_con4;
 	void* __iomem cru_gate_con32;
 	void* __iomem cru_softrst_con26;
 	void* __iomem mailbox_b2a_cmd_0;
+	void* __iomem scratch;
 	
-	pr_info("mailbox: ENTER mailbox_init()");
+	pr_info("timer_irq: ENTER mailbox_init()");
+
+	// Accessing this reserved section appears to cause a segfault
+	/*scratch = reserve_iomem((phys_addr_t)RESERVED_BASE, 4);
+	pr_info("timer_irq: reserved 0: %d\n", ioread32(scratch));
+	release_iomem((phys_addr_t)RESERVED_BASE, 4);*/
 	
 	// Disable clock gate on mailbox
 	cru_gate_con32 = reserve_iomem((phys_addr_t)CRU_GATE_CON32, CRU_GATE_CON32_LEN);
@@ -78,7 +86,7 @@ static int __init mailbox_init(void) {
 	iowrite32(0xffff0000 | (1 << 12) | (1 << 11) | (1 << 10), cru_softrst_con26);
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	
-	pr_info("mailbox: MCU and mailbox reset (MAILBOX_B2A_CMD_0 = 0)");
+	pr_info("timer_irq: MCU and mailbox reset (MAILBOX_B2A_CMD_0 = 0)");
 	
 	// copy RISC-V program into SYSTEM_SRAM
 	system_sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
@@ -102,7 +110,7 @@ static int __init mailbox_init(void) {
 
 	// read mailbox register
 	mailbox_b2a_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
-	pr_info("mailbox: MAILBOX_B2A_CMD_0 after MCU runs = %x\n", ioread32(mailbox_b2a_cmd_0));
+	pr_info("timer_irq: MAILBOX_B2A_CMD_0 after MCU runs = %x\n", ioread32(mailbox_b2a_cmd_0));
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 
 
@@ -111,13 +119,11 @@ static int __init mailbox_init(void) {
 	return 0;
 }
 
-static void __exit mailbox_exit(void) {
-	//pr_info("ENTER: read_mimpid_exit()");
-	//pr_info("EXIT: read_mimpid_exit()");
+static void __exit timer_irq_exit(void) {
 }
 
-module_init(mailbox_init);
-module_exit(mailbox_exit);
+module_init(timer_irq_init);
+module_exit(timer_irq_exit);
 
 MODULE_LICENSE("GPL");
 
