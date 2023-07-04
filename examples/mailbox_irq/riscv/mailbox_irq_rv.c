@@ -73,9 +73,9 @@ csrw    mie, zero \n    # disable interrupts"
 		    );
   // clear the mailbox interrupt by writing 1 to bit 0 of MAILBOX_A2B_STATUS  
   *mailbox_a2b_status = 0xff;
-  // update B2A_CMD_0 to notify kernel module
-  *mailbox_b2a_cmd_0 = *mcu_timecmp;
-  *mailbox_b2a_dat_0 = 0xc409abcd;
+  // update B2A_CMD_0 to notify kernel module that interrupt was processed
+  *mailbox_b2a_cmd_0 = 0xabababab;
+  *mailbox_b2a_dat_0 = 0xdeadbeef;
   // clear IPIC interrupt pending flag (optional?)
   __asm__ volatile ("csrw    %0,%1"
 		    : // no input

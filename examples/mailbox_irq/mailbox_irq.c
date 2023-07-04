@@ -119,6 +119,8 @@ static int __init mailbox_init(void) {
 	
 	iowrite32(0xff, mcu_intc + 0x00); // group 00
 	iowrite32(0xff, mcu_intc + 0x04); // group 01
+	// the `edp` interrupt (assuming my table is right) is in
+	//group 2 and will always fire unless you disable it.
 	//iowrite32(0xff, mcu_intc + 0x08); // group 02
 	iowrite32(0xff, mcu_intc + 0x0C); // group 03
 	iowrite32(0xff, mcu_intc + 0x10); // group 04
@@ -181,7 +183,7 @@ static int __init mailbox_init(void) {
 	for (int i = 0x80; i <= 0x100; i += 4) {
 	  sprintf(str, "%s%x, ", str, ioread32(mcu_intc + i));
 	}
-	pr_info("mailbox: %s\n", str);
+	pr_info("mailbox: INTMUX flag registers: 0x%s\n", str);
 	// read mailbox register
 	mailbox_cmd = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 	mailbox_dat = reserve_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
