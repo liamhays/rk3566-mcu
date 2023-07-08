@@ -67,7 +67,7 @@ static int __init timer_irq_init(void) {
 	void* __iomem cru_gate_con32;
 	void* __iomem cru_softrst_con26;
 	void* __iomem mailbox_b2a_cmd_0;
-	void* __iomem scratch;
+	void* __iomem mailbox_b2a_dat_0;
 	
 	pr_info("timer_irq: ENTER mailbox_init()");
 
@@ -86,7 +86,7 @@ static int __init timer_irq_init(void) {
 	iowrite32(0xffff0000 | (1 << 12) | (1 << 11) | (1 << 10), cru_softrst_con26);
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 	
-	pr_info("timer_irq: MCU and mailbox reset (MAILBOX_B2A_CMD_0 = 0)");
+	pr_info("timer_irq: MCU and mailbox reset");
 	
 	// copy RISC-V program into SYSTEM_SRAM
 	system_sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
@@ -110,8 +110,13 @@ static int __init timer_irq_init(void) {
 
 	// read mailbox register
 	mailbox_b2a_cmd_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
-	pr_info("timer_irq: MAILBOX_B2A_CMD_0 after MCU runs = %x\n", ioread32(mailbox_b2a_cmd_0));
+	mailbox_b2a_dat_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
+	u32 mailbox_reg;
+	// mailbox register should be about 0x1000000, that's what mtimecmp is set to.
+	while ((mailbox_reg = ioread32(mailbox_b2a_cmd_0)) == 0x11111111); // wait for 
+	pr_info("timer_irq: MCU interrupt fired, MAILBOX_B2A_CMD_0 after MCU runs = 0x%x", ioread32(mailbox_b2a_cmd_0));
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
+	release_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
 
 
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
