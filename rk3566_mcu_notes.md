@@ -260,14 +260,11 @@ are memory-mapped registers (**these are not CSRs!**). The rest of the
 registers listed are CSRs, and their "Offset" is actually the CSR
 number. (see the SCR1 EAS for info on these registers).
 
-The SCR1 core defaults to a timer register base address of 0x490000. I
-have confirmed that there are no 32-bit registers in the `MCU_INTC`
-section of memory, only registers with 8 bits writable, which match
-INTMUX and not the timer. While the MCU can read and write 0x490000
-just fine, I believe it's actually just writing to RAM---if the MCU
-reads that address on startup, it's just random data that doesn't
-match the expected 0x01 listed in the TRM.
-
+The timer control registers appear to be in the Reserved section
+after the `MCU_INTC` section, at 0xFE7F0000. The read/write behavior
+of the registers at this address match expectations: 2 writable bits
+of `TIMER_CTRL`, 10 writable bits of `TIMER_DIV`, and 4 32-bit
+registers after (`mtimecmp` and `mtime`).
 ## MCU memory
 The SCR1 core provides an optional 64KB of tightly coupled
 memory. While the RK3566 provides 64KB `SYSTEM_SRAM`, it does not
@@ -600,8 +597,8 @@ that it won't make it into Debian Bookworm, so I think mailbox work
 through the kernel driver will have to wait a bit.
 
 # Oddities
-Information in this section may be completely untrue or untested.
-
+- Reading 0xFE7A0000 from ARM makes a segfault and from MCU causes a
+  crash. Reading 0xFE7B0000 and up through the region seems to be okay.
 
 # tools
 `27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`

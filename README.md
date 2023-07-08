@@ -9,12 +9,12 @@ What's documented:
 - Info about the core
 - How to boot the MCU
 - Some system-level MCU configuration registers
+- the MCU timer base address and usage
 - INTMUX interrupt mapping (needs more testing but should be accurate)
   and register location
 
 
 What's left:
-- Configuring the MCU timer and finding its base address
 - Using the `rockchip-mailbox` Linux driver---diederik put in a [pull
   request to
   Debian](https://salsa.debian.org/kernel-team/linux/-/merge_requests/730)
@@ -25,4 +25,5 @@ What's left:
 
 
 # Using the MCU
-See `examples` for code examples.
+See `examples` for code examples. Make sure you install the
+`linux-headers` package for your OS and architecture.
