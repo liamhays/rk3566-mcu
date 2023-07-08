@@ -6,19 +6,28 @@
 #define MAILBOX_B2A_DAT_0 (MAILBOX_BASE + 0x0034)
 
 
-// also the "INTC" base in Rockchip register space
-#define MCU_BASE (0xFE790000)
-// timers are memory mapped CSRs
-#define MCU_TIMER_CTRL (MCU_BASE + 0x0000)
-// the first six MCU registers are just memory locations, not CSRs.
-#define MCU_MTIMECMP (MCU_BASE + 0x0010)
+#define TIMER_BASE (0xFE7F0000)
+#define MCU_TIMER_CTRL (TIMER_BASE + 0x0000)
+#define MCU_TIMER_DIV (TIMER_BASE + 0x0004)
 // timers are rewritable
-#define MCU_MTIME (MCU_BASE + 0x0008)
+#define MCU_MTIME (TIMER_BASE + 0x0008)
+#define MCU_MTIMEH (TIMER_BASE + 0x000C)
+// the first six MCU registers are just memory locations, not CSRs.
+#define MCU_MTIMECMP (TIMER_BASE + 0x0010)
+#define MCU_MTIMECMPH (TIMER_BASE + 0x0014)
+
+#define MCU_BASE (0xFE790000)
 
 
 volatile uint32_t* mailbox_b2a_cmd_0 = (uint32_t*)MAILBOX_B2A_CMD_0;
-volatile uint64_t* mtimecmp = (uint64_t*)MCU_MTIMECMP;
-volatile uint64_t* mtime = (uint64_t*)MCU_MTIME;
+volatile uint32_t* mailbox_b2a_dat_0 = (uint32_t*)MAILBOX_B2A_DAT_0;
+
+volatile uint32_t* timer_ctrl = (uint32_t*)MCU_TIMER_CTRL;
+volatile uint32_t* timer_div = (uint32_t*)MCU_TIMER_DIV;
+volatile uint32_t* mtimecmp = (uint32_t*)MCU_MTIMECMP;
+volatile uint32_t* mtimecmph = (uint32_t*)MCU_MTIMECMPH;
+volatile uint32_t* mtime = (uint32_t*)MCU_MTIME;
+volatile uint32_t* mtimeh = (uint32_t*)MCU_MTIMEH;
 
 // Under GCC, interrupt functions must have the interrupt attribute
 static void irq_entry() __attribute__ ((interrupt ("machine")));
@@ -29,6 +38,7 @@ static void irq_entry() __attribute__ ((interrupt ("machine")));
 // bits (32-26 = 6, 2**6 = 64)
 #pragma GCC optimize ("align-functions=64")
 void irq_entry() {
+  //*timer_ctrl = 0;
   uint32_t cause;
 
   // in direct mode, you have to read mcause
@@ -41,27 +51,42 @@ void irq_entry() {
   // in this case, disable the comparator
   __asm__ volatile ("la t0,0xfe790010\nsw zero, 0(t0)"
 		    : : :);
-  
+
   // update mailbox register
-  *mailbox_b2a_cmd_0 = 0xabababab;
+  
+  *mailbox_b2a_cmd_0 = *mtime;
 
 }
 #pragma GCC pop_options
 
 int main() {
-  // default value to make change visible
-  *mailbox_b2a_cmd_0 = 0x11111111;
+  // timer defaults to enabled
+
+  // default value
+  *mailbox_b2a_cmd_0 = *timer_ctrl;//0x11111111;
   
+  *timer_ctrl = 0; // disable timer
+  // set the divider to something that makes it a little slower
+  *timer_div = 30;
+  
+  // writing all 1s prevent problems caused by intermediate values
+  *mtimecmph = 0xffffffff;
+  *mtimecmph = 0;
+  *mtimecmp = 0x1000000;
+
+  // reset mtime
+  *mtimeh = 0;
+  *mtime = 0;
+
+  // now configure system interrupts
   // set vector address in mtvec and use direct mode
-  // I think the IPIC can vector interrupts, but I haven't tested that yet.
   uint32_t mtvec_value = (((uint32_t)&irq_entry >> 6) << 6);
   __asm__ volatile ("csrw     mtvec, %0"
 		    : // no output
 		    : "r" (mtvec_value) // write mtvec_value to %0
 		    : // no clobber
 		    );
-  
-		      
+
   // enable timer interrupt in mie
   uint32_t mtie_enable = 0x80; // set bit 7 (0-indexed)
   __asm__ volatile ("csrrs    zero, mie, %0"
@@ -77,17 +102,11 @@ int main() {
 		    : "r" (mie_enable)
 		    :
 		    );
-  // timer is enabled by default according to TRM
-  // timer divider defaults to one tick per every clock tick
-
-  // set low 32 bits of MTIMECMP to 0x100 (something low)
   
-  // writing all 1s prevent problems caused by intermediate values
-  //*mtimecmp = 0xffffffffffffffff;
-  //*mtimecmp = 0x100;
+  // re-enable the timer
+  *timer_ctrl = 1;
 
-  // reset the timer so the interrupt actually fires
-  //*mtime = 0;
+  // wait for interrupt (could also use `wfi`)
   while (1);
 
   return 0;
