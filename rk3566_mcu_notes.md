@@ -50,9 +50,8 @@ the Makefile, but here are the flags I've used with success:
 - `-Wall -lgcc`: Enable warnings and link to `libgcc.a`, used for
   hardware compatibility.
 
-# RK3566 MCU hardware
-## RK3566 MCU registers
-These registers *control* the MCU in the context of the RK3566 as a
+# RK3566 MCU control registers
+These registers are about the MCU in the context of the RK3566 as a
 whole. The MCU also has dedicated registers that control subsystems
 within it.
 
@@ -161,7 +160,8 @@ enable the MCU as a wakeup source. First you have to set the bit in
 `PMU_WAKEUP_INT_CON` (see below), then you have to enable bit 15 in
 this register. Together, both bits enable the MCU as a wakeup source.
 
-**TODO: test this. I don't know what the status of Linux sleep is.**
+**TODO: test this. Suspend works on the Quartz64 with the power button
+as wakeup.**
 
 ## `PMU_WAKEUP_INT_CON`
 | Bit   | Attr | Reset value | Description                                                  |
@@ -177,6 +177,38 @@ this register. Together, both bits enable the MCU as a wakeup source.
 
 This register is used to find the wakeup source, and bit 15 indicates
 when the MCU was the wakeup source, by my understanding.
+
+# RK3566 MCU clock
+I think the MCU is clocked rather fast, but I don't know how fast. 
+The MCU sits in the `ALIVE` power domain, in the `VD_LOGIC` voltage
+domain, under the `BIU_BUS` bus interface unit. Most simpler I/O
+peripherals (UART, I2C, etc.) are in this same group as well.
+
+## `CRU_CLKSEL_CON50`
+| Bit   | Attr | Reset value | Description                  |
+|-------|------|-------------|------------------------------|
+| 31:16 | RW   | 0x0000      | Write enable for low 16 bits |
+| 15:6  | RO   | 0x000       | reserved                     |
+| 5:4   | RW   | 0x0         | `pclk_bus_sel`               |
+| 3:2   | RO   | 0x0         | reserved                     |
+| 1:0   | RW   | 0x0         | `aclk_bus_sel`               |
+
+Options for `pclk_bus_sel`:
+- 0b00: `clk_gpll_div_100m`
+- 0b01: `clk_gpll_div_75m`
+- 0b10: `clk_cpll_div_50m`
+- 0b11: `xin_osc0_func_mux`
+
+Options for `aclk_bus_sel`:
+- 0b00: `clk_gpll_div_200m`
+- 0b01: `clk_gpll_div_150m`
+- 0b10: `clk_cpll_div_100m`
+- 0b11: `xin_osc0_func_mux`
+
+Fractional PLLs are APLL, PPLL, HPLL, DPLL, CPLL, and GPLL. Integer
+PLLs are MPLL, NPLL, and VPLL. Presumably `pclk` is PPLL (maybe the
+`FOUTPOSTDIV` output, which comes after the division) and `aclk` is
+APLL.
 
 # Programming the MCU
 See the `timer_irq` example for code, but the basic flow is:
@@ -260,13 +292,13 @@ are memory-mapped registers (**these are not CSRs!**). The rest of the
 registers listed are CSRs, and their "Offset" is actually the CSR
 number. (see the SCR1 EAS for info on these registers).
 
-The SCR1 core defaults to a timer register base address of 0x490000. I
-have confirmed that there are no 32-bit registers in the `MCU_INTC`
-section of memory, only registers with 8 bits writable, which match
-INTMUX and not the timer. While the MCU can read and write 0x490000
-just fine, I believe it's actually just writing to RAM---if the MCU
-reads that address on startup, it's just random data that doesn't
-match the expected 0x01 listed in the TRM.
+The timer control registers are in the Reserved section after the
+`MCU_INTC` section, at 0xFE7F0000. These registers are not mirrored,
+as they are implemented in the SCR1 core as an address mask, as
+opposed to a peripheral inside the RK3566. 
+
+The timer follows the RISC-V timer standard. See the `timer_irq` for
+an example.
 
 ## MCU memory
 The SCR1 core provides an optional 64KB of tightly coupled
@@ -600,8 +632,8 @@ that it won't make it into Debian Bookworm, so I think mailbox work
 through the kernel driver will have to wait a bit.
 
 # Oddities
-Information in this section may be completely untrue or untested.
-
+- Reading 0xFE7A0000 from ARM makes a segfault and from MCU causes a
+  crash. Reading 0xFE7B0000 and up through the region seems to be okay.
 
 # tools
 `27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`
