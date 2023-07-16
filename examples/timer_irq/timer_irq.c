@@ -113,7 +113,7 @@ static int __init timer_irq_init(void) {
 	mailbox_b2a_dat_0 = reserve_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
 	u32 mailbox_reg;
 	// mailbox register should be about 0x1000000, that's what mtimecmp is set to.
-	while ((mailbox_reg = ioread32(mailbox_b2a_cmd_0)) == 0x11111111); // wait for 
+	while ((mailbox_reg = ioread32(mailbox_b2a_cmd_0)) == 0x11111111); // wait for timer interrupt
 	pr_info("timer_irq: MCU interrupt fired, MAILBOX_B2A_CMD_0 after MCU runs = 0x%x", ioread32(mailbox_b2a_cmd_0));
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 	release_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
