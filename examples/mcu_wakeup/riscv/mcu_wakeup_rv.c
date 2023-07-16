@@ -49,12 +49,20 @@ volatile uint32_t* pmu_int_mask_con = (uint32_t*)PMU_INT_MASK_CON;
 static void irq_entry() __attribute__ ((interrupt ("machine")));
 
 void toggle_led() {
-  uint32_t reg_value = *gpio3_swport_dr_h;
+  /*uint32_t reg_value = *gpio3_swport_dr_h;
   // external LED is GPIO3_C4, or 5th bit of DR_H
   if (reg_value & (1 << 4)) {
     *gpio3_swport_dr_h = (1 << (16+4)) | (0 << 4);
   } else {
     *gpio3_swport_dr_h = (1 << (16+4)) | (1 << 4);
+    }*/
+
+  uint32_t reg_value = *gpio0_swport_dr_l;
+  // external LED is GPIO3_C4, or 5th bit of DR_H
+  if (reg_value & 1) {
+    *gpio0_swport_dr_l = (1 << 16) | 0;
+  } else {
+    *gpio0_swport_dr_l = (1 << 16) | 1;
   }
 }
 
@@ -103,7 +111,7 @@ void irq_entry() {
 #pragma GCC pop_options
 
 int main() {
-
+  
 
   // set external LED pin to output
   *gpio3_swport_ddr_h = (1 << (16+4)) | (1 << 4);
@@ -114,7 +122,6 @@ int main() {
     toggle_led();
     for (uint32_t i = 0; i < 0xffff; i++);
   }
-  *gpio3_swport_dr_h = (1 << (16+4)) | (1 << 4);
 
   return 0;
 }

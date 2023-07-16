@@ -133,7 +133,7 @@ static int __init mcu_wakeup_init(void) {
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 
 	mdelay(200); // let MCU run
-	
+
 	// assert interrupt request
 	/*grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
 	iowrite32((1 << (12+16)) | (1 << 12), grf_soc_con3);
