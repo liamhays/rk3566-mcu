@@ -155,13 +155,15 @@ See below for how this field works.
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits                                    |
 | 15    | RW   | 0x0         | `wakeup_mcu_sft`, 1=wakeup PMU when MCU is set as wakeup source |
 
-I think bit 15 of this register is like part 2 of a 2-step process to
-enable the MCU as a wakeup source. First you have to set the bit in
-`PMU_WAKEUP_INT_CON` (see below), then you have to enable bit 15 in
-this register. Together, both bits enable the MCU as a wakeup source.
+If the PMU has been configured to wakeup by the MCU, the MCU can write
+1 to this bit to wakeup the PMU. A similar method is used in the
+RK3399: the bit `wakeup_sft_m0` in `PMU_SFT_CON` is written to by the
+M0 to wake up the PMU.
 
-**TODO: test this. Suspend works on the Quartz64 with the power button
-as wakeup.**
+`mcu_sft` means "MCU software".
+
+**Idea:** make the MCU blink the LED on loop, then put the Quartz to
+sleep and see if it's still running.
 
 ## `PMU_WAKEUP_INT_CON`
 | Bit   | Attr | Reset value | Description                                                  |
@@ -169,14 +171,17 @@ as wakeup.**
 | 31:16 | RW   | 0x0000      | Write enable for low 16 bits                                 |
 | 15    | RW   | 0x0         | `wakeup_mcu_sft_en`, 1=enable mcusft source as wakeup source |
 
+Write 1 to this bit to enable using the register above as a wakeup
+method.
+
 ## `PMU_WAKEUP_INT_ST`
 | Bit   | Attr | Reset value | Description                                            |
 |-------|------|-------------|--------------------------------------------------------|
 | 31:16 | RO   | 0x0000      | reserved (this is a read-only register)                |
 | 15    | RO   | 0x0         | `wakeup_sys_int_st`, 1=MCU sft as wakeup source status |
 
-This register is used to find the wakeup source, and bit 15 indicates
-when the MCU was the wakeup source, by my understanding.
+This register is used to find the wakeup source, and this bit
+indicates when the MCU was the reason it woke up.
 
 # RK3566 MCU clock
 I think the MCU is clocked rather fast, but I don't know how fast. 
@@ -581,20 +586,31 @@ that don't map to INTMUX inputs are the PPIs at the start.
 | 249           | nerrirq[4]                     | 281        |
 | 250           | nclusterpmuirq                 | 282        |
 
-# ahb2axi
-There are two ahb2axi interrupts: `ahb2axi_i` and `ahb2axi_d`. These
-interrupts and the following registers are the only mention of the
-term `ahb2axi` in either part of the RK3566 TRM.
+# Power
+The MCU is turned off during sleep by default. I tested this by
+hooking it up to an external LED and giving the MCU a loop to blink
+the LED, then putting the Quartz64 into suspend with `systemctl
+suspend`. (note that blinking is not the best way to do this, because
+I think there's a conflict with the Linux GPIO system).
 
-## Registers
-| Register       | Bit | Attr | Reset Value | Name                      |
-|----------------|-----|------|-------------|---------------------------|
-| `GRF_SOC_CON3` | 15  | RW   | 0x0         | `mcu_ahb2axi_d_buf_flush` |
-| `GRF_SOC_CON3` | 14  | RW   | 0x0         | `mcu_ahb2axi_i_buf_flush` |
-|----------------|-----|------|-------------|---------------------------|
-| `GRF_SOC_CON6` | 9   | RW   | 0x0         | `ahb2axi_d_rd_clean`      |
-| `GRF_SOC_CON6` | 8   | RW   | 0x0         | `ahb2axi_i_rd_clean`      |
-| `GRF_SOC_CON6` | 7:0 | RW   | 0xff        | `ahb2axi_d_timeout`       |
+The strange part is that it doesn't come back on. The registers are in
+the correct state, but the blinking doesn't resume.
+## MCU registers after running then suspend
+```
+[ 4522.448054] read_registers: CRU_GATE_CON32 = fff
+[ 4522.452674] read_registers: CRU_SOFTRST_CON26 = 0
+[ 4522.456876] read_registers: GRF_SOC_CON3 = 0
+[ 4522.460470] read_registers: GRF_SOC_CON4 = fdcc
+```
+
+## MCU registers on reboot after suspend
+```
+[  389.923596] read_registers: CRU_GATE_CON32 = 8fff
+[  389.924136] read_registers: CRU_SOFTRST_CON26 = 400
+[  389.924611] read_registers: GRF_SOC_CON3 = 0
+[  389.925098] read_registers: GRF_SOC_CON4 = 0
+```
+
 
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every
@@ -631,9 +647,29 @@ enable the config option `CONFIG_ROCKCHIP_MBOX`. However, they said
 that it won't make it into Debian Bookworm, so I think mailbox work
 through the kernel driver will have to wait a bit.
 
+
+# ahb2axi
+There are two ahb2axi interrupts: `ahb2axi_i` and `ahb2axi_d`. These
+interrupts and the following registers are the only mention of the
+term `ahb2axi` in either part of the RK3566 TRM.
+
+## Registers
+| Register       | Bit | Attr | Reset Value | Name                      |
+|----------------|-----|------|-------------|---------------------------|
+| `GRF_SOC_CON3` | 15  | RW   | 0x0         | `mcu_ahb2axi_d_buf_flush` |
+| `GRF_SOC_CON3` | 14  | RW   | 0x0         | `mcu_ahb2axi_i_buf_flush` |
+|----------------|-----|------|-------------|---------------------------|
+| `GRF_SOC_CON6` | 9   | RW   | 0x0         | `ahb2axi_d_rd_clean`      |
+| `GRF_SOC_CON6` | 8   | RW   | 0x0         | `ahb2axi_i_rd_clean`      |
+| `GRF_SOC_CON6` | 7:0 | RW   | 0xff        | `ahb2axi_d_timeout`       |
+
 # Oddities
 - Reading 0xFE7A0000 from ARM makes a segfault and from MCU causes a
-  crash. Reading 0xFE7B0000 and up through the region seems to be okay.
+  crash. Reading 0xFE7B0000 and up through this reserved region seems
+  to be okay.
 
 # tools
 `27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`
+
+- `USER_LED2` is the blue one and sits on `GPIO0_A0_d`. The green LED
+  is `VCC3V3_SYS`.

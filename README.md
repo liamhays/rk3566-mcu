@@ -21,9 +21,15 @@ What's left:
   to enable the `CONFIG_ROCKCHIP_MBOX` kernel flag, and it has been
   merged...it will appear in Plebian eventually.
 - Using the MCU as a wakeup source, which depends on support for
-  suspend of whatever type for the RK3566.
+  suspend of whatever type for the RK3566. I am working on this but
+  it's complicated and I'm new to the kernel.
+  
+If there's interest in a kernel module for the MCU, open an issue on
+this repository or contact me some other way and I may be able to
+write one.
 
 
 # Using the MCU
-See `examples` for code examples. Make sure you install the
+See `examples` for code examples. Each folder is a basic kernel module
+and RISC-V source for the MCU. Make sure you install the
 `linux-headers` package for your OS and architecture.
