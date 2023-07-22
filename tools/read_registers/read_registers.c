@@ -85,7 +85,7 @@ static int __init read_registers_init(void) {
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 		
 	system_sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
-	pr_info("read_registers: SYSTEM_SRAM address 0x8000 = %x", ioread32(system_sram + 0x8000));
+	pr_info("read_registers: SYSTEM_SRAM address 0x0000 = %x", ioread8(system_sram));
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
 
 	grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
