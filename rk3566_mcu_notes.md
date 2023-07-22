@@ -256,6 +256,8 @@ The MCU is connected to the system through an interconnect over
 to be changed to AXI. Interrupts look fairly complicated but
 manageable, because of the INTMUX in the IPIC.
 
+The same SCR1 core is used in the RV1126.
+
 ## MCU boot
 The boot address field in `GRF_SOC_CON4` is only 16 bits, even though
 the MCU boots from a 32-bit address. The following function, taken
@@ -282,6 +284,8 @@ int spl_fit_standalone_release(char *id, uintptr_t entry_point)
 }
 #endif
 ```
+
+The RV1126 has similar code for its SCR1.
 
 ## MCU CPU control registers
 The Rockchip register names seen in the TRM are build by adding
@@ -611,7 +615,111 @@ the correct state, but the blinking doesn't resume.
 [  389.925098] read_registers: GRF_SOC_CON4 = 0
 ```
 
+## Relevant files in kernel source
+- `drivers/clk/rockchip/clk-rk3568.c`. This is the most useful one,
+  with CPU clock rates, PLL rates, names, and references to clock
+  trees that might not actually be public information?
+- `drivers/clk/rockchip/clk.h` and `clk.c`.
+- `include/dt-bindings/clock/rk3568-cru.h`. This one just defines
+  numbers for clocks and resets.
+  
+- `drivers/soc/rockchip/pm_domains.c`. This one defines a bunch of
+  power domains for Rockchip chips. Note the `rockchip_pmu_power*` functions.
 
+## Usable SRAM blocks
+The RK3566 has two SRAMs: `SYSTEM_SRAM` (64KB) and `PMU_SRAM`
+(8KB). Both of these are used by the bl31 boot blob. The TRM says that
+the "SDRAM initialization image code" (which I think is the same as
+the DDR init blob) is copied to SYSTEM_SRAM, then other boot code is
+copied to actual DDR RAM.
+
+I've had zero issues completely trashing the contents of `SYSTEM_SRAM`
+for use with the MCU. Clearing `PMU_SRAM` causes the system to
+eventually crash and reboot (HDMI output stops, USB devices are
+disconnected), so I would recommend not touching it. The MCU also
+seems to refuse to run from `PMU_SRAM`, which means that I can't test
+if the particular SRAM is the reason that the MCU stops running.
+
+TODO: try running out of DDR RAM, a) to see if it works at all, and b)
+to see if it works in suspend.
+
+## bl31 sections
+```
+architecture: aarch64, flags 0x00000102:
+EXEC_P, D_PAGED
+start address 0x0000000000040000
+
+Program Header:
+    LOAD off    0x0000000000010000 vaddr 0x0000000000040000 paddr 0x0000000000040000 align 2**16
+         filesz 0x000000000002a000 memsz 0x000000000002a000 flags rwx
+    LOAD off    0x0000000000040000 vaddr 0x00000000fdcd0000 paddr 0x000000000006a000 align 2**16
+         filesz 0x0000000000001ed0 memsz 0x0000000000001ed0 flags rwx
+    LOAD off    0x000000000004c000 vaddr 0x000000000006c000 paddr 0x000000000006c000 align 2**16
+         filesz 0x00000000000050d7 memsz 0x0000000000043000 flags rw-
+    LOAD off    0x0000000000061000 vaddr 0x00000000fdcc1000 paddr 0x00000000fdcc1000 align 2**16
+         filesz 0x000000000000a000 memsz 0x000000000000a000 flags rwx
+    LOAD off    0x000000000006e000 vaddr 0x00000000fdcce000 paddr 0x00000000fdcce000 align 2**16
+         filesz 0x0000000000002000 memsz 0x0000000000002000 flags rwx
+    LOAD off    0x0000000000070000 vaddr 0x00000000fdcd0000 paddr 0x00000000fdcd0000 align 2**16
+         filesz 0x0000000000002000 memsz 0x0000000000002000 flags rwx
+   STACK off    0x0000000000000000 vaddr 0x0000000000000000 paddr 0x0000000000000000 align 2**4
+         filesz 0x0000000000000000 memsz 0x0000000000000000 flags rw-
+private flags = 0x0:
+
+Sections:
+Idx Name          Size      VMA               LMA               File off  Algn
+  0 .text_sram_init 00006000  00000000fdcc1000  00000000fdcc1000  00061000  2**12
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .data_sram_init 00004000  00000000fdcc7000  00000000fdcc7000  00067000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  2 .text_sram    00001000  00000000fdcce000  00000000fdcce000  0006e000  2**12
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  3 .data_sram    00001000  00000000fdccf000  00000000fdccf000  0006f000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  4 .text_pmusram 00002000  00000000fdcd0000  00000000fdcd0000  00070000  2**4
+                  CONTENTS, ALLOC, LOAD, CODE
+  5 ro            0002a000  0000000000040000  0000000000040000  00010000  2**16
+                  CONTENTS, ALLOC, LOAD, CODE
+  6 .text_pmusram_reuse 00001ed0  00000000fdcd0000  000000000006a000  00040000  2**2
+                  CONTENTS, ALLOC, LOAD, CODE
+  7 .data         000050d7  000000000006c000  000000000006c000  0004c000  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+  8 stacks        00002000  0000000000071100  0000000000071100  000510d7  2**6
+                  ALLOC
+  9 .bss          00029de0  0000000000073100  0000000000073100  000510d7  2**6
+                  ALLOC
+ 10 xlat_table    00012000  000000000009d000  000000000009d000  000510d7  2**12
+                  ALLOC
+SYMBOL TABLE:
+no symbols
+```
+
+Note that it loads data into `SYSTEM_SRAM` and `PMU_SRAM`.
+
+## ATF cold boot process (AArch64)
+from
+https://trustedfirmware-a.readthedocs.io/en/latest/plat/rockchip.html
+
+- Bootrom
+- BL1/BL2 (not sure why these are grouped together)
+- BL31
+- BL33
+- Linux
+
+BL31 is integrated into U-Boot.
+
+## RK3566 ATF
+https://review.trustedfirmware.org/c/TF-A/trusted-firmware-a/+/16952
+
+No RISC-V code in here. This does touch the `alive_32k_ena` bit in the
+PMU, which `"Enable pclk_pmu and clk_pmu switch to 32KHz clock by
+hardware."` Maybe this changes these pieces to an external 32khz
+clock?
+
+On suspend, this ATF shuts down several PDs but leaves ALIVE on (might
+not even be disable-able).
+
+Trusted RAM for BL31 is 512KB starting at address 0.
 # Mailbox
 The mailbox is nothing more than a set of 32-bit registers. Every
 register can be accessed by both the ARM cores and the MCU. From Linux
