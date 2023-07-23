@@ -626,7 +626,7 @@ the correct state, but the blinking doesn't resume.
 - `drivers/soc/rockchip/pm_domains.c`. This one defines a bunch of
   power domains for Rockchip chips. Note the `rockchip_pmu_power*` functions.
 
-## Usable SRAM blocks
+## Usable MCU memory
 The RK3566 has two SRAMs: `SYSTEM_SRAM` (64KB) and `PMU_SRAM`
 (8KB). Both of these are used by the bl31 boot blob. The TRM says that
 the "SDRAM initialization image code" (which I think is the same as
@@ -640,8 +640,12 @@ disconnected), so I would recommend not touching it. The MCU also
 seems to refuse to run from `PMU_SRAM`, which means that I can't test
 if the particular SRAM is the reason that the MCU stops running.
 
-TODO: try running out of DDR RAM, a) to see if it works at all, and b)
-to see if it works in suspend.
+I have tried running the MCU from DDR RAM, and it refuses to run just
+like from `PMU_SRAM`. Both DDR and `PMU_SRAM` sit on the AXI bus, and
+the MCU *seems* to sit on the AHB bus. (`SYSTEM_SRAM` is on
+AHB). Setting `mcu_sel_axi` doesn't help it run from AXI memory, so
+the MCU might be restricted to running from just `SYSTEM_SRAM`. (It
+might also be able to run from SPI flash).
 
 ## bl31 sections
 ```
