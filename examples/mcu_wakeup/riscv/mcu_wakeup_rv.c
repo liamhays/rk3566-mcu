@@ -113,15 +113,17 @@ void irq_entry() {
 int main() {
   
 
+  *mailbox_b2a_cmd_0 = 0xdeadbeef;
   // set external LED pin to output
   *gpio3_swport_ddr_h = (1 << (16+4)) | (1 << 4);
+  toggle_led();
   // I can't get the timer to work, but this does.
-  while (1) {
+  /*while (1) {
     toggle_led();
     for (uint32_t i = 0; i < 0xffff; i++);
     toggle_led();
     for (uint32_t i = 0; i < 0xffff; i++);
-  }
+    }*/
 
   return 0;
 }
