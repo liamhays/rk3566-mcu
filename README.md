@@ -12,7 +12,9 @@ What's documented:
 - the MCU timer base address and usage
 - INTMUX interrupt mapping (needs more testing but should be accurate)
   and register location
-
+- MCU execution during suspend: **due to ARM Trusted Firmware, this is
+  impossible**. TF-A requests bus idles on suspend for the MCU and the memory it
+  likes to run from, making it impossible to run during system suspend.
 
 What's left:
 - Using the `rockchip-mailbox` Linux driver---diederik put in a [pull
@@ -20,9 +22,7 @@ What's left:
   Debian](https://salsa.debian.org/kernel-team/linux/-/merge_requests/730)
   to enable the `CONFIG_ROCKCHIP_MBOX` kernel flag, and it has been
   merged...it will appear in Plebian eventually.
-- Using the MCU as a wakeup source, which depends on support for
-  suspend of whatever type for the RK3566. I am working on this but
-  it's complicated and I'm new to the kernel.
+
   
 If there's interest in a kernel module for the MCU, open an issue on
 this repository or contact me some other way and I may be able to
