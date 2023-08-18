@@ -8,11 +8,12 @@ Much of this information is drawn from the [RK3568 Technical Reference
 Manual](https://opensource.rock-chips.com/images/2/26/Rockchip_RK3568_TRM_Part1_V1.3-20220930P.PDF). The
 RK3568 and RK3566 are basically the same chip with [some slight
 changes](https://www.96rocks.com/blog/2020/11/28/introduce-rockchip-rk3568/)
-(scroll down to the end of the page).
+(scroll down to the end of the page). If you read this document, you
+should be familiar with the TRM.
 
 If you reference the [RISC-V ISA
 spec](https://riscv.org/technical/specifications/), be sure to include
-the privileged spec document.
+the privileged spec document, as the MCU only runs in Machine mode.
 
 Helpful hint: `|` next to a signal name is
 the Verilog bit-reduction operator, which is equivalent to ANDing all
@@ -61,7 +62,6 @@ respective bit.
 `W1C` means "write 1 to clear", usually used for interrupt status
 registers.
 
-I don't know what all of these registers do yet.
 
 ## `CRU_GATE_CON32`
 | Bit   | Attr | Reset value | Description                             |
@@ -112,10 +112,11 @@ think this is actually slightly more complicated than it sounds:
 
 - The SCR1 core has AHB-Lite and AXI4 bus interfaces. It does not
   appear to require you to use one interface exclusively, but there
-  also appears to be no way to tell the SCR1 which bus to use.
+  also appears to be no way to tell the SCR1 which bus to use, aside
+  from whatever gets physically integrated into the silicon.
 - The RK3566 TRM chapter on the MCU shows a block diagram where the I
   and D buses from the SCR1 are called `I_BUS_AHB` and `D_BUS_AHB` and
-  both go to a block called `INTERCONNECT`. This suggests to me that
+  both go to a block called `INTERCONNECT`. This suggests that
   the SCR1 is connected to the rest of the RK3566 through *only* the
   AHB bus.
 - However, the existence of the `ahb2axi_*_flush` bits suggests that
@@ -123,10 +124,9 @@ think this is actually slightly more complicated than it sounds:
   buses.
 
 My theory is that Rockchip enabled only the AHB interface on the SCR1
-to save silicon space, and used an existing AHB<->AXI IP block with an
-added toggle. This doesn't really make a lot of sense---what
-particular reason would require the MCU to sit on AXI---but I guess
-the option exists.
+and used the existing AHB<->AXI IP block. Most of the peripherals in
+the chip are on the AHB (or APB, technically) bus, so there should
+already be an AHB<->AXI interface for the ARM cores.
 
 Another possibility is that the MCU has both bus interfaces connected,
 but certain buses are only usable in certain power conditions. For
@@ -163,9 +163,6 @@ RK3399: the bit `wakeup_sft_m0` in `PMU_SFT_CON` is written to by the
 M0 to wake up the PMU.
 
 `mcu_sft` means "MCU software".
-
-**Idea:** make the MCU blink the LED on loop, then put the Quartz to
-sleep and see if it's still running.
 
 ## `PMU_WAKEUP_INT_CON`
 | Bit   | Attr | Reset value | Description                                                  |
@@ -221,13 +218,6 @@ Much of the documentation in the TRM is literal copy-paste from the
 [SCR1 External Architecture
 Specification (EAS)](https://github.com/syntacore/scr1/blob/master/docs/scr1_eas.pdf). 
 
-The MCU is connected to the system through an interconnect over
-`I_BUS_AHB` and `D_BUS_AHB`, but `GRF_SOC_CON3` probably allows this
-to be changed to AXI. Interrupts look fairly complicated but
-manageable, because of the INTMUX in the IPIC.
-
-The same SCR1 core is used in the RV1126.
-
 ## MCU boot
 The boot address field in `GRF_SOC_CON4` is only 16 bits, even though
 the MCU boots from a 32-bit address. The following function, found in
@@ -255,7 +245,10 @@ int spl_fit_standalone_release(char *id, uintptr_t entry_point)
 #endif
 ```
 
-The RV1126 has similar code for its SCR1.
+U-Boot code for the RV1126 ([PDF
+datasheet](https://www.armdesigner.com/download/Rockchip%20RV1126%20Datasheet%20V1.2%2020200522.pdf))
+has a similar function, albeit with different registers, so the RV1126
+also has an SCR1 core.
 
 ## MCU CPU control registers
 The Rockchip register names seen in the TRM are build by adding
@@ -272,12 +265,13 @@ registers listed are CSRs, and their "Offset" is actually the CSR
 number. (see the SCR1 EAS for info on these registers).
 
 The timer control registers are in the Reserved section after the
-`MCU_INTC` section, at 0xFE7F0000. These registers are not mirrored,
-as they are implemented in the SCR1 core as an address mask, as
-opposed to a peripheral inside the RK3566. 
+`MCU_INTC` section, at 0xFE7F0000. The base address is undocumented in
+the TRM, and I found the location by probing from the SCR1. These
+registers are not mirrored, as they are implemented in the SCR1 core
+as an address mask, as opposed to a peripheral inside the RK3566.
 
-The timer follows the RISC-V timer standard. See the `timer_irq` for
-an example.
+The timer follows the RISC-V timer standard. See the `timer_irq`
+project for an example.
 
 ## MCU memory
 The SCR1 core provides an optional 64KB of tightly coupled
@@ -334,8 +328,7 @@ The approach I've used so far is to set the MCU core to direct
 interrupt mode and branch from there, since I haven't figured out the
 INTMUX-IPIC connections yet.
 
-**Note:** the `edp` interrupt appears to be continuously firing. I
-reported this in the Quartz64 bridged chat, we'll see what happens.
+**Note:** the `edp` interrupt appears to be continuously firing.
 
 ## INTMUX registers
 The TRM does not explicitly say the base address of the INTMUX the way
@@ -575,8 +568,7 @@ that don't map to INTMUX inputs are the PPIs at the start.
 # Power and MCU in suspend
 The MCU is turned off during sleep. I checked this by making a small
 MCU program that blinks the builtin LED, then suspended the whole
-system with `systemctl suspend`. RK3566 TF-A (a version is available
-at
+system with `systemctl suspend`. RK3566 TF-A (at
 [https://review.trustedfirmware.org/c/TF-A/trusted-firmware-a/+/16952](https://review.trustedfirmware.org/c/TF-A/trusted-firmware-a/+/16952))
 requests bus idle on suspend for `BIU_BUS`, which contains the MCU and
 many other peripherals, as well as `BIU_SECURE_FLASH`, which contains
@@ -588,14 +580,15 @@ hang, but that's to be expected).
 TF-A is responsible for the low-level power management on the RK3566,
 and the code in `pmu_pd_powerdown_config()` in `pmu.c` in the above
 pull request sets bus idle and prepares some of the system for
-powerdown/suspend. **Therefore: you cannot use the MCU during sleep on
-the RK3566.**
+powerdown/suspend. **Therefore, because the MCU is not placed in a
+low-power domain, and because TF-A does its stuff: you cannot use the
+MCU during sleep on the RK3566.**
 
-This code is very likely from Rockchip themselves, as the PR is
-signed-off-by `shengfei Xu <xsf@rock-chips.com>`. Personally, I find
-it impressive that ~1500 lines of hardware configs are enough to port
-TF-A to a new platform.
-	
+I find this somewhat strange, because the PMU has flags to allow the
+MCU to wake up the system. Leaving `BIU_BUS` and `BIU_SECURE_FLASH`
+running (not idle) in sleep would probably allow the MCU to keep
+running, but might interfere with the hardware suspend process.
+
 # MCU clock
 I think the MCU is clocked rather fast, but I don't know how fast. 
 The MCU sits in the `ALIVE` power domain, in the `VD_LOGIC` voltage
@@ -643,12 +636,10 @@ The mailbox has a "four elements combined interrupt" that is generated
 when all 4 bits of the `INTEN` register for one direction of the
 mailbox are enabled. I think that you have to write to all the CMD/DAT
 registers (in that order, all 4 pairs) to generate this
-interrupt. Furthermore, if it is a separate signal, it doesn't appear
-to be connected to any interrupt controller. (The Mailbox section of
-the TRM is clearly not up-to-date for the RK3566---it mentions a
-Cortex-A7, for example).
+interrupt. This signal doesn't appear to be connected to the interrupt
+controller, so it is probably a carryover from older mailbox
+documentation.
 
-## Mailbox through kernel driver
 The `rockchip-mailbox` driver in the Linux kernel source implements a
 mailbox interface for the RK3368, at least according to the
 `compatible` field. This driver uses the same register offsets as the
@@ -656,12 +647,10 @@ RK3368, and `rk3566_mbox.dts` is device tree overlay source that
 *should* work with the RK3566---it's straight from the Rockchip BSP
 Linux source---but I still need to test it.
 
-**Update:** This would probably work if the Rockchip mailbox driver
-were compiled into the Plebian kernel. I discussed this on the bridged
-#Quartz64 channel and `diederik` made a pull request to Debian to
-enable the config option `CONFIG_ROCKCHIP_MBOX`. However, they said
-that it won't make it into Debian Bookworm, so I think mailbox work
-through the kernel driver will have to wait a bit.
+As mentioned in the README, there is a PR in to Debian that will
+enable the `CONFIG_ROCKCHIP_MBOX` flag. Once this gets merged, I will
+make an example for the MCU that communicates to Linux using the
+kernel mailbox interface instead of direct register pokes.
 
 
 # ahb2axi
@@ -684,10 +673,10 @@ term `ahb2axi` in either part of the RK3566 TRM.
 | `GRF_SOC_CON6` | 8   | RW   | 0x0         | `ahb2axi_i_rd_clean`      |
 | `GRF_SOC_CON6` | 7:0 | RW   | 0xff        | `ahb2axi_d_timeout`       |
 
-# Oddities
+# System Oddities
 - Reading 0xFE7A0000 from ARM makes a segfault and from MCU causes a
-  crash. Reading 0xFE7B0000 and up through this reserved region seems
-  to be okay.
+  complete system crash. Reading 0xFE7B0000 and up through this
+  reserved region seems to be okay.
 
 # tools
 `27_26_25_24 23_22_21_20 19_18_17_16 15_14_13_12 11_10_9_8 7_6_5_4 3_2_1_0`
