@@ -294,14 +294,24 @@ RISC-V side channel right there? Furthermore, TF-A puts some code in
 `PMU_SRAM`, and if you try to write on top of this, the entire system
 will hard crash and reboot.
 
-As far as I can tell, DDR RAM cannot be accessed from the MCU. I
+DDR RAM is accessible from the MCU, but seemingly only for data
+accesses. The MCU cannot run code from DDR RAM. To test this, I
 allocated 128KB of DRAM from the kernel memory pool, found a
 64KB-aligned address within that allocated space, copied a RISC-V
 program to it, and started the MCU from that address. The MCU did not
 start, regardless of whether it was set to AXI or AHB. I don't know
-why this is---`SYSTEM_SRAM` is on AXI and works just fine, for
-example---but my conclusion is that you can't use DDR RAM with the
-MCU.
+why this is---`SYSTEM_SRAM` is on AXI and works just fine.
+
+However, for data accesses, the MCU can write and read DDR RAM. To
+test this, I allocated 4 bytes of DDR RAM, wrote a value to it, then
+had the MCU (running from `SYSTEM_SRAM`) read that address and write
+it to the mailbox. See the `ddr_test` example. The MCU can also write
+to DDR, then read it back and into the mailbox register. Importantly,
+this seems to work better **when the MCU is set to use the AXI
+bus**. When it's on the default AHB, there seem to be issues where
+other values related to the MCU (for example, boot address), as well
+as plain garbage data, end up in the mailbox register. This might be
+related to the ahb2axi block and its configuration parameters.
 
 # MCU interrupts
 The SCR1 core has a 16-line "Integrated Programmable Interrupt
