@@ -56,4 +56,4 @@ dkms.conf
 *~
 
 # generated RISC-V binaries for kernel modules
-*_bin.h
+build/
