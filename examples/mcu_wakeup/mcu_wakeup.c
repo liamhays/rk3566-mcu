@@ -16,7 +16,8 @@
 #define GRF_SOC_CON3_LEN (4)
 #define GRF_SOC_CON4 (SYS_GRF_BASE + 0x510)
 #define GRF_SOC_CON4_LEN (4)
-
+#define GRF_SOC_CON6 (SYS_GRF_BASE + 0x518)
+#define GRF_SOC_CON6_LEN (4)
 #define CRU_BASE (0xFDD20000)
 
 #define CRU_GATE_CON32 (CRU_BASE + 0x380)
@@ -34,6 +35,7 @@
 #define PMU_INT_MASK_CON (PMU_BASE + 0x000C)
 #define PMU_WAKEUP_INT_CON (PMU_BASE + 0x0010)
 #define PMU_WAKEUP_INT_ST (PMU_BASE + 0x0014)
+#define PMU_BUS_IDLE_SFTCON0 (PMU_BASE + 0x0050)
 #define PMU_REG_LEN (4)
 
 #define MAILBOX_BASE (0xFE780000)
@@ -87,6 +89,7 @@ static int __init mcu_wakeup_init(void) {
 	void* __iomem sram;
 	void* __iomem grf_soc_con3;
 	void* __iomem grf_soc_con4;
+	void* __iomem grf_soc_con6;
 	void* __iomem cru_gate_con32;
 	void* __iomem cru_softrst_con26;
 	void* __iomem mailbox_cmd;
@@ -107,17 +110,13 @@ static int __init mcu_wakeup_init(void) {
 	iowrite32(0xffff0000 | (1 << 12) | (1 << 11) | (1 << 10), cru_softrst_con26);
 	pr_info("mcu_wakeup: MCU, mailbox, INTMUX reset\n");
 
-	// set mcu_sel_axi
-	/*grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	iowrite32((1 << (13+16)) | (1 << 13), grf_soc_con3);
-	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	*/
+
 
 	// Addresses with ffff at the start are part of the kernel
 	// logical memory map: the way the kernel directly maps
 	// physical memory to another location.
 	// Kernel also likes to allocate memory on boundaries.
-	uint8_t* ddr_mem = (uint8_t*)kmalloc(ALLOC_SIZE, GFP_KERNEL);
+	/*uint8_t* ddr_mem = (uint8_t*)kmalloc(ALLOC_SIZE, GFP_KERNEL);
 	phys_addr_t ddr_mem_phys = virt_to_phys(ddr_mem);
 	// MCU can only boot on 64KB boundaries
 	phys_addr_t mcu_boot_address_phys = (ddr_mem_phys >> 16) << 16;
@@ -126,7 +125,7 @@ static int __init mcu_wakeup_init(void) {
 	pr_info("mcu_wakeup: ddr_mem = %px, ddr_mem_phys = %llx, mcu_boot_address_phys = %llx, mcu_boot_address = %px\n",
 		(void*)(ddr_mem), (uint64_t)ddr_mem_phys,
 		(uint64_t)(mcu_boot_address_phys), (void*)(mcu_boot_address));
-
+	*/
 	/*pmu_wakeup_int_con = reserve_iomem((phys_addr_t)PMU_WAKEUP_INT_CON, PMU_REG_LEN);
 	//pr_info("mcu_wakeup: PMU_WAKEUP_INT_CON = %x", ioread32(pmu_wakeup_int_con));
 	// defaults to 0, just enable mcusft
@@ -135,42 +134,39 @@ static int __init mcu_wakeup_init(void) {
 	
 	// copy RISC-V program into SYSTEM_SRAM
 	// don't wipe PMU_SRAM! the system will crash and restart
-	/*sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
+	sram = reserve_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
 	// zero out SRAM
 	for (int i = 0; i < 0xffff; i += 4) {
 	  iowrite32(0, sram + i);
 	}
 	memcpy_toio(sram, mcu_wakeup_rv_bin, mcu_wakeup_rv_bin_len);
 	release_iomem((phys_addr_t)SYSTEM_SRAM_BASE, SYSTEM_SRAM_LEN);
-	*/
-	memcpy(ddr_mem, mcu_wakeup_rv_bin, mcu_wakeup_rv_bin_len);
-	for (int i = 0; i < mcu_wakeup_rv_bin_len; i++) {
-	  if (ddr_mem[i] != mcu_wakeup_rv_bin[i]) {
-	    pr_info("mcu_wakeup: mismatch at %x\n", i);
-	  }
-	}
+	
+	//memcpy(ddr_mem, mcu_wakeup_rv_bin, mcu_wakeup_rv_bin_len);
 
 	// write the high bits of the boot address to the boot address register
 	grf_soc_con4 = reserve_iomem((phys_addr_t)GRF_SOC_CON4, GRF_SOC_CON4_LEN);
-	iowrite32((0xffff0000) | (mcu_boot_address_phys >> 16), grf_soc_con4);
-	//iowrite32((0xffff0000) | (SYSTEM_SRAM_BASE >> 16), grf_soc_con4);
+	//iowrite32((0xffff0000) | (mcu_boot_address_phys >> 16), grf_soc_con4);
+	iowrite32((0xffff0000) | (SYSTEM_SRAM_BASE >> 16), grf_soc_con4);
 	pr_info("mcu_wakeup: grf_soc_con4 = %x\n", ioread32(grf_soc_con4));
 	release_iomem((phys_addr_t)GRF_SOC_CON4, GRF_SOC_CON4_LEN);
 
 	udelay(10); // Rockchip BSP u-boot does this after writing the address
-	
+
+	// set mcu_sel_axi
+	grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
+	iowrite32((1 << (13+16)) | (1 << 13), grf_soc_con3);
+
 	// now enable MCU, INTMUX, and mailbox
 	iowrite32(0xffff0000, cru_softrst_con26);
 	release_iomem((phys_addr_t)CRU_SOFTRST_CON26, CRU_SOFTRST_CON26_LEN);
 
-	mdelay(200); // let MCU run
+	mdelay(1000); // let MCU run
 
-	// assert interrupt request
-	/*grf_soc_con3 = reserve_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
-	iowrite32((1 << (12+16)) | (1 << 12), grf_soc_con3);
-	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);*/
-	
-
+	// set idle_req_bus in BUS_IDLE_SFTCON0 to see if it shuts down the MCU (it does)
+	void* __iomem pmu_bus_idle_sftcon0 = reserve_iomem((phys_addr_t)PMU_BUS_IDLE_SFTCON0, PMU_REG_LEN);
+	iowrite32((1 << (15+16)) | (1 << 15), pmu_bus_idle_sftcon0);
+	release_iomem((phys_addr_t)PMU_BUS_IDLE_SFTCON0, PMU_REG_LEN);
 	// read mailbox register
 	mailbox_cmd = reserve_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 	mailbox_dat = reserve_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
@@ -179,7 +175,10 @@ static int __init mcu_wakeup_init(void) {
 	release_iomem((phys_addr_t)MAILBOX_B2A_CMD_0, MAILBOX_REG_LEN);
 	release_iomem((phys_addr_t)MAILBOX_B2A_DAT_0, MAILBOX_REG_LEN);
 
-	kfree(ddr_mem);
+	release_iomem((phys_addr_t)GRF_SOC_CON3, GRF_SOC_CON3_LEN);
+	release_iomem((phys_addr_t)GRF_SOC_CON6, GRF_SOC_CON6_LEN);
+	
+	//kfree(ddr_mem);
 	return 0;
 }
 
