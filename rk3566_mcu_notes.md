@@ -662,6 +662,30 @@ enable the `CONFIG_ROCKCHIP_MBOX` flag. Once this gets merged, I will
 make an example for the MCU that communicates to Linux using the
 kernel mailbox interface instead of direct register pokes.
 
+# MCU debug
+The SCR1 core has a JTAG interface, and its maker, Syntacore, provides
+an OpenOCD config file for debugging the core. The RK3566 breaks out
+these JTAG pins on GPIO0---which isn't available on the Quartz64 GPIO
+header.
+
+In the event you have another board that does expose these pins,
+here's register and pin info. It's formatted as comments because there
+isn't really a better way.
+
+```c
+// Configure JTAG pins via pinmux
+// TDO is MCU_JTAGTDO on PMU_GRF_GPIO0B_IOMUX_L 14:12 (TRM part 1 page 178)
+// TCK is MCU_JTAGTCK on PMU_GRF_GPIO0B_IOMUX_H 2:0 (TRM part 1 page 178)
+// TRSTN is MCU_JTAGTRSTN on PMU_GRF_GPIO0C_IOMUX_L 14:12 (TRM part 1 page 179)
+// TMS is MCU_JTAGTMS on PMU_GRF_GPIO0C_IOMUX_L 10:8 (TRM part 1 page 179)
+// TDI is MCU_JTAGTDI on PMU_GRF_GPIO0C_IOMUX_L 6:4 (TRM part 1 page 179)
+//
+// TDO can be configured on gpio0b3
+// TCK can be configured on gpio0b4
+// TDI can be configured on gpio0c1
+// TMS can be configured on gpio0c2
+// TRSTN can be configured on gpio0c3
+```
 
 # ahb2axi
 ## Overview
